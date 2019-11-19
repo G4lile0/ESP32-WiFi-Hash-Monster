@@ -68,7 +68,7 @@ Preferences preferences;
 bool useSD = false;
 
 uint32_t lastDrawTime = 0;
-uint32_t lastButtonTime;
+uint32_t lastButtonTime = 0;
 uint32_t tmpPacketCounter;
 uint32_t pkts[MAX_X+1]; // here the packets per second will be saved
 uint32_t deauths = 0; // deauth frames per second
@@ -768,36 +768,43 @@ void coreTask( void * p ) {
   while (true) {
     currentTime = millis();
     /* bit of spaghetti code, have to clean this up later :D_ */
-    M5.update();
-    // buttons assignment : 
-    //  - SD Activation => BtnA (A for Activation)
-    //  - Brightness => BtnB (B for Brightness)
-    //  - Channel => BtnC (C for Channel)
-
-    if( M5.BtnA.wasPressed() ) {
-      if (useSD) {
-        useSD = false;
-        sdBuffer.close(&SD);
-        draw();
-      } else {
-        if (setupSD())
-          sdBuffer.open(&SD);
+    if ( currentTime - lastButtonTime > 100 ) {
+      
+      M5.update();
+      // buttons assignment : 
+      //  - SD Activation => BtnA (A for Activation)
+      //  - Brightness => BtnB (B for Brightness)
+      //  - Channel => BtnC (C for Channel)
+  
+      if( M5.BtnA.wasPressed() ) {
+        if (useSD) {
+          useSD = false;
+          sdBuffer.close(&SD);
+          draw();
+        } else {
+          if (setupSD())
+            sdBuffer.open(&SD);
+          draw();
+        }
+      }
+  
+      if( M5.BtnB.wasPressed() ) {
+        bright+=50;
+        if (bright>251) bright=0;
+        M5.Lcd.setBrightness(bright);
+        bright_leds+=100;
+        if (bright_leds>251) bright_leds=0;
+      }
+  
+      if( M5.BtnC.wasPressed() ) {
+        setChannel(ch + 1);
         draw();
       }
+
+      lastButtonTime = currentTime;
+
     }
 
-    if( M5.BtnB.wasPressed() ) {
-      bright+=50;
-      if (bright>251) bright=0;
-      M5.Lcd.setBrightness(bright);
-      bright_leds+=100;
-      if (bright_leds>251) bright_leds=0;
-    }
-
-    if( M5.BtnC.wasPressed() ) {
-      setChannel(ch + 1);
-      draw();
-    }
 
     // save buffer to SD
     if (useSD) sdBuffer.save(&SD);
