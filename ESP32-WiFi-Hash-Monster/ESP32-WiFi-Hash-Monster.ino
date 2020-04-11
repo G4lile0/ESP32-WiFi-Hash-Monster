@@ -37,9 +37,12 @@
 #include <cstddef>
 
 #include <Preferences.h>
-#define MAX_CH 14     // 1-14ch(1-11 US,1-13 EU and 1-14 Japan)
+#define MAX_CH 11     // 1-14ch(1-11 US,1-13 EU and 1-14 Japan)
+#define AUTO_SWITCH_CH true // switch channels automatically
+#define AUTO_CHANNEL_INTERVAL 30000 // how often to switch channels automatically, in milliseconds
 //#define SNAP_LEN 2324 // max len of each recieved packet
 #define SNAP_LEN 2324 // limit packet capture for eapol
+#define USE_SD_BY_DEFAULT true
 
 #define MAX_X 315     // 315  128
 #define MAX_Y 130     // 230 51
@@ -65,10 +68,14 @@ esp_err_t event_handler(void* ctx,system_event_t* event){return ESP_OK;}
 /* ===== run-time variables ===== */
 Buffer sdBuffer;
 Preferences preferences;
-bool useSD = false;
+bool useSD = USE_SD_BY_DEFAULT;
 
 uint32_t lastDrawTime = 0;
 uint32_t lastButtonTime = 0;
+uint32_t lastAutoSwitchChTime = 0;
+int autoChannels[] = {1, 6, 11};
+int AUTO_CH_COUNT = sizeof(autoChannels) / sizeof(int);
+int autoChIndex = 0;
 uint32_t tmpPacketCounter;
 uint32_t pkts[MAX_X+1]; // here the packets per second will be saved
 uint32_t deauths = 0; // deauth frames per second
@@ -109,7 +116,7 @@ char last_eapol_ssid[33];
  * Data structure for beacon information
  */
 
-#define MAX_SSIDs 256
+#define MAX_SSIDs 1792
 
 struct ssid_info {
   uint8_t mac[6];
@@ -222,7 +229,7 @@ void setup() {
   if (useSD) {
     Serial.println("pues esta encendido2");
   }
-  useSD = false;
+  useSD = USE_SD_BY_DEFAULT;
  
   // second core ----------------------------------------------------
 
@@ -327,6 +334,13 @@ void setChannel(int newChannel) {
   //  esp_wifi_set_promiscuous(true);
 }
 
+void autoSwitchChannel(uint32_t currentTime) {
+  autoChIndex = (autoChIndex + 1) % AUTO_CH_COUNT;
+  setChannel(autoChannels[autoChIndex]);
+  Serial.print("Auto-switching to channel ");
+  Serial.println(ch);
+  lastAutoSwitchChTime = currentTime;
+}
 
 // ===== functions ===================================================
 bool setupSD() {
@@ -766,8 +780,13 @@ void coreTask( void * p ) {
   tmpPacketCounter = 0; // reset to avoid overflow on first render
 
   while (true) {
+    bool needDraw = false;
     currentTime = millis();
     /* bit of spaghetti code, have to clean this up later :D_ */
+    if ( currentTime - lastAutoSwitchChTime > AUTO_CHANNEL_INTERVAL ) {
+      autoSwitchChannel(currentTime);
+      needDraw = true;
+    }
     if ( currentTime - lastButtonTime > 100 ) {
       
       M5.update();
@@ -780,12 +799,11 @@ void coreTask( void * p ) {
         if (useSD) {
           useSD = false;
           sdBuffer.close(&SD);
-          draw();
         } else {
           if (setupSD())
             sdBuffer.open(&SD);
-          draw();
         }
+        needDraw = true;
       }
   
       if( M5.BtnB.wasPressed() ) {
@@ -798,11 +816,11 @@ void coreTask( void * p ) {
   
       if( M5.BtnC.wasPressed() ) {
         setChannel(ch + 1);
-        draw();
+        needDraw = true;
       }
 
       lastButtonTime = currentTime;
-
+      if (needDraw) draw();
     }
 
 
