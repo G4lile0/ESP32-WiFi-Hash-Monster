@@ -1,7 +1,7 @@
 // ESP32-WiFi-Hash-Monster
 // 90% based on PacketMonitor32 from spacehuhn //  https://github.com/spacehuhn/PacketMonitor32/
 // ported to M5stack by 2018.01.11 macsbug  //    https://macsbug.wordpress.com/2018/01/11/packetmonitor32-with-m5stack/
-// modify to capture eapol/handshake by G4lile0  6/oct/2019
+// modify to capture eapol/handshake with new GUI with the Purple Monster by G4lile0  6/oct/2019
 // improvements by tobozo 18/nov/2019:
 //   - more compliance with M5 Core functions and TFT_eSprite
 //   - SD-loadable support with M5Stack-SD-Updater (requires https://github.com/tobozo/M5Stack-SD-Updater/)
@@ -21,7 +21,7 @@
 // Button : click to change channel hold to dis/enable SD
 // SD : GPIO4=CS(CD/D3), 23=MOSI(CMD), 18=CLK, 19=MISO(D0)
 //--------------------------------------------------------------------
-#include <M5Stack.h>
+#include <M5Stack.h>        // https://github.com/m5stack/M5Stack/    (use version => 0.3.0 to properly display the Monster) 
 #include <M5StackUpdater.h> // https://github.com/tobozo/M5Stack-SD-Updater/
 #include "Free_Fonts.h"
 #include <SPI.h>
@@ -275,7 +275,7 @@ void setup() {
   face1.setColorDepth(16);
   face1.createSprite(64, 64);
   face1.fillSprite(TFT_BLACK); // Note: Sprite is filled with black when created
-  face1.setSwapBytes(true);
+  face1.setSwapBytes(false);
 
   M5.Lcd.clear();
 
