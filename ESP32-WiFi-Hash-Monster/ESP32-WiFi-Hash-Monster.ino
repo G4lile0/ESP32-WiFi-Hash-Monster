@@ -13,6 +13,8 @@
 //     * Brightness => BtnB (B for Brightness)
 //     * Channel => BtnC (C for Channel)
 //   - seamless Odroid-GO support (if using https://github.com/tobozo/ESP32-Chimera-Core instead of M5Stack Core)
+//  added channel auto-switching (configurable) and reduce the amount of drawing by scriptguru  10/April/2020
+//  
 //
 //  more info https://miloserdov.org/?p=1047
 //  more info https://www.evilsocket.net/2019/02/13/Pwning-WiFi-networks-with-bettercap-and-the-PMKID-client-less-attack/
@@ -794,8 +796,23 @@ void coreTask( void * p ) {
       //  - SD Activation => BtnA (A for Activation)
       //  - Brightness => BtnB (B for Brightness)
       //  - Channel => BtnC (C for Channel)
-  
-      if( M5.BtnA.wasPressed() ) {
+
+      if( M5.BtnA.wasReleased() ) {
+       
+          if (bright>1) { 
+              Serial.println("Incognito Mode");
+              bright=0;
+              bright_leds=0;
+              M5.Lcd.setBrightness(bright);
+              
+            } else { 
+              bright=100;
+              bright_leds=100;
+              M5.Lcd.setBrightness(bright);
+              }
+        
+        
+      } else if (M5.BtnA.wasReleasefor(700)) {
         if (useSD) {
           useSD = false;
           sdBuffer.close(&SD);
@@ -805,23 +822,34 @@ void coreTask( void * p ) {
         }
         needDraw = true;
       }
-  
-      if( M5.BtnB.wasPressed() ) {
-        bright+=50;
-        if (bright>251) bright=0;
-        M5.Lcd.setBrightness(bright);
-        bright_leds+=100;
-        if (bright_leds>251) bright_leds=0;
-      }
+      
+
+      if( M5.BtnB.wasReleased() ) {
+              bright+=50;
+              if (bright>251) bright=0;
+              M5.Lcd.setBrightness(bright);
+          } else if (M5.BtnB.wasReleasefor(700)) {
+              bright_leds+=100;
+              if (bright_leds>251) bright_leds=0;
+              Serial.println(bright_leds);
+          }
+ 
   
       if( M5.BtnC.wasPressed() ) {
         setChannel(ch + 1);
         needDraw = true;
       }
-
       lastButtonTime = currentTime;
       if (needDraw) draw();
     }
+
+
+
+
+
+
+
+
 
 
     // save buffer to SD
