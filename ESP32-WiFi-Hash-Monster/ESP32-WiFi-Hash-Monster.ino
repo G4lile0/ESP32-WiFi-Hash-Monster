@@ -14,7 +14,7 @@
 //     * Channel => BtnC (C for Channel)
 //   - seamless Odroid-GO support (if using https://github.com/tobozo/ESP32-Chimera-Core instead of M5Stack Core)
 //  added channel auto-switching (configurable) and reduce the amount of drawing by scriptguru  10/April/2020
-//  
+//     
 //
 //  more info https://miloserdov.org/?p=1047
 //  more info https://www.evilsocket.net/2019/02/13/Pwning-WiFi-networks-with-bettercap-and-the-PMKID-client-less-attack/
@@ -39,7 +39,7 @@
 #include <cstddef>
 
 #include <Preferences.h>
-#define MAX_CH 11     // 1-14ch(1-11 US,1-13 EU and 1-14 Japan)
+#define MAX_CH 13     // 1-14ch(1-11 US,1-13 EU and 1-14 Japan)
 #define AUTO_SWITCH_CH true // switch channels automatically
 #define AUTO_CHANNEL_INTERVAL 30000 // how often to switch channels automatically, in milliseconds
 //#define SNAP_LEN 2324 // max len of each recieved packet
@@ -101,7 +101,7 @@ TFT_eSprite graph1 = TFT_eSprite(&M5.Lcd); // Sprite object graph1
 TFT_eSprite graph2 = TFT_eSprite(&M5.Lcd); // Sprite object graph2
 TFT_eSprite units1 = TFT_eSprite(&M5.Lcd); // Sprite object units1
 TFT_eSprite units2 = TFT_eSprite(&M5.Lcd); // Sprite object units2
-TFT_eSprite face1   = TFT_eSprite(&M5.Lcd); // Sprite object face
+TFT_eSprite face1  = TFT_eSprite(&M5.Lcd); // Sprite object face
 TFT_eSprite header = TFT_eSprite(&M5.Lcd); // Sprite object header
 TFT_eSprite footer = TFT_eSprite(&M5.Lcd); // Sprite object footer
 
@@ -110,8 +110,9 @@ int delta = 1;
 int grid = 0;
 int tcount = 0;
 
-char last_ssid[33];
-char last_eapol_ssid[33];
+char    last_ssid[33];
+int8_t  last_rssi;  
+char  last_eapol_ssid[33];
 
 
 /*
@@ -213,8 +214,8 @@ void setup() {
   M5.Lcd.setFreeFont(FM12);
   M5.Lcd.drawString( "Purple Hash Monster", 6, 24);
   M5.Lcd.drawString( "by @g4lile0", 29, 44);
-  M5.Lcd.drawString( "90% PacketMonitor32", 6, 64);
-  M5.Lcd.drawString( "by @Spacehuhn", 29, 84);
+  M5.Lcd.drawString( "90% PacketMonitor32", 6, 74);
+  M5.Lcd.drawString( "by @Spacehuhn", 29, 94);
   M5.Lcd.setSwapBytes(true);
   M5.Lcd.pushImage(200, 158, 64, 64, love_64);
   delay( 3000 );
@@ -561,6 +562,9 @@ void wifi_promiscuous(void* buf, wifi_promiscuous_pkt_type_t type) {
       Serial.println(packetLength);
       Serial.print(" SSID: ");
       printDataSpan(38, SSID_length, pkt->payload);
+      Serial.print(" RSSI: ");
+      last_rssi = pkt->rx_ctrl.rssi;      
+      Serial.println(last_rssi);
     }
   }
 
@@ -730,7 +734,7 @@ void draw_RSSI() {
   footer.setBitmapColor( TFT_BLUE, TFT_WHITE ); // mask will be converted to this color
   footer.fillSprite( TFT_BLUE );
   footer.setTextDatum( TL_DATUM );
-  String p = "New SSID:"+(String)last_ssid ;
+  String p = "New SSID:"+(String)last_ssid +" "+(String)last_rssi ;
   footer.drawString(p, 4 , 3);                 // string DRAW
   p = "New HS: "+(String)last_eapol_ssid;
   footer.drawString(p, 4 , 3+17);                 // string DRAW
