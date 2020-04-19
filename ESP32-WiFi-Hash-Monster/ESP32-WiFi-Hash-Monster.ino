@@ -40,7 +40,6 @@
 
 #include <Preferences.h>
 #define MAX_CH 13     // 1-14ch(1-11 US,1-13 EU and 1-14 Japan)
-#define AUTO_SWITCH_CH true // switch channels automatically
 #define AUTO_CHANNEL_INTERVAL 30000 // how often to switch channels automatically, in milliseconds
 //#define SNAP_LEN 2324 // max len of each recieved packet
 #define SNAP_LEN 2324 // limit packet capture for eapol
@@ -75,9 +74,10 @@ bool useSD = USE_SD_BY_DEFAULT;
 uint32_t lastDrawTime = 0;
 uint32_t lastButtonTime = 0;
 uint32_t lastAutoSwitchChTime = 0;
-int autoChannels[] = {1, 6, 11};
+int autoChannels[] = {1, 6, 11};     
 int AUTO_CH_COUNT = sizeof(autoChannels) / sizeof(int);
 int autoChIndex = 0;
+uint8_t autoChMode = 0 ; // 0 No auto -  1 Switch channels automatically 
 uint32_t tmpPacketCounter;
 uint32_t pkts[MAX_X+1]; // here the packets per second will be saved
 uint32_t deauths = 0; // deauth frames per second
@@ -612,10 +612,23 @@ void draw() {
   graph_eapol += eapol;
   total_deauths += deauths;
   graph_deauths += deauths;
+
+  String p;
   
-  String p = "C:"+(String)ch + "|AP:" + (String)ssid_count + "|Pkts " +
+  if (autoChMode == 0) { p = "C:"+(String)ch + "|AP:" + (String)ssid_count + "|Pkts " +
      (String)tmpPacketCounter + "[" + (String)eapol + "]" + "["+ (String)deauths + "]" +
      (useSD ? "|SD" : "");
+   }
+
+  if (autoChMode == 1) { p = "A:"+(String)ch + "|AP:" + (String)ssid_count + "|Pkts " +
+     (String)tmpPacketCounter + "[" + (String)eapol + "]" + "["+ (String)deauths + "]" +
+     (useSD ? "|SD" : "");
+   }
+
+if (autoChMode == 2) { p = "S:"+(String)ch + "|AP:" + (String)ssid_count + "|Pkts " +
+     (String)tmpPacketCounter + "[" + (String)eapol + "]" + "["+ (String)deauths + "]" +
+     (useSD ? "|SD" : "");
+   }
 
   header.setTextColor( TFT_BLACK, TFT_BLUE ); // unintuitive: use black/blue mask
   header.setBitmapColor( TFT_BLUE, TFT_WHITE ); // mask will be converted to this color
@@ -789,12 +802,18 @@ void coreTask( void * p ) {
     bool needDraw = false;
     currentTime = millis();
     /* bit of spaghetti code, have to clean this up later :D_ */
-    if ( currentTime - lastAutoSwitchChTime > AUTO_CHANNEL_INTERVAL ) {
-      autoSwitchChannel(currentTime);
-      needDraw = true;
+    
+    if (autoChMode==1) {
+
+        if ( currentTime - lastAutoSwitchChTime > AUTO_CHANNEL_INTERVAL ) {
+            autoSwitchChannel(currentTime);
+            needDraw = true;
+         }
     }
+  
+
     if ( currentTime - lastButtonTime > 100 ) {
-      
+  
       M5.update();
       // buttons assignment : 
       //  - SD Activation => BtnA (A for Activation)
@@ -827,7 +846,6 @@ void coreTask( void * p ) {
         needDraw = true;
       }
       
-
       if( M5.BtnB.wasReleased() ) {
               bright+=50;
               if (bright>251) bright=0;
@@ -838,20 +856,20 @@ void coreTask( void * p ) {
               Serial.println(bright_leds);
           }
  
-  
-      if( M5.BtnC.wasPressed() ) {
+      if( M5.BtnC.wasReleased() ) {
         setChannel(ch + 1);
         needDraw = true;
-      }
+          } else if (M5.BtnC.wasReleasefor(700)) {
+              autoChMode++;
+              if (autoChMode>1) autoChMode=0;
+              Serial.println(autoChMode);
+          }
+
+
+
       lastButtonTime = currentTime;
       if (needDraw) draw();
     }
-
-
-
-
-
-
 
 
 
