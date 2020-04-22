@@ -538,12 +538,18 @@ void wifi_promiscuous(void* buf, wifi_promiscuous_pkt_type_t type) {
   //if  ((frameSubType == SUBTYPE_PROBE_RESPONSE) || (frameSubType == SUBTYPE_BEACONS )) {
   */
 
-  if ((frameSubType == SUBTYPE_BEACONS) && (isAlphaNumeric(pkt->payload[38])) && (isAlphaNumeric(pkt->payload[39]))&& (isAlphaNumeric(pkt->payload[42])) ) {
-    if (useSD) sdBuffer.addPacket(pkt->payload, packetLength);
+  if ((frameSubType == SUBTYPE_BEACONS) && (version == 0) ) {
     uint8_t SSID_length = pkt->payload[37];
-
     if (SSID_length>32) return;
- 
+
+    bool ascci_error = false;
+    for (u =0; u<SSID_length;u++) {
+      if (!isprint(pkt->payload[38+u])) { Serial.printf("NO IMPRI %02d - %02d", u , SSID_length );Serial.println("");ascci_error = true;  }
+      if (!isAscii(pkt->payload[38+u])) { Serial.printf("NO ASCII %02d - %02d", u , SSID_length );Serial.println("");ascci_error = true;  }
+        }
+
+    if (ascci_error) return;
+
     memcpy(&ssid_known[MAX_SSIDs-1].mac,pkt->payload+16,6);
     
     bool known = false;
@@ -555,6 +561,8 @@ void wifi_promiscuous(void* buf, wifi_promiscuous_pkt_type_t type) {
     }
 
     if (!known) {
+      // only write the beacon packet the first time that we see it, to reduce writing on the SD-CARD.
+      if (useSD) sdBuffer.addPacket(pkt->payload, packetLength);
       memcpy(&ssid_known[ssid_count].mac,&ssid_known[MAX_SSIDs-1].mac ,6);
       memcpy(&ssid_known[ssid_count].ssid,pkt->payload+38, SSID_length);
       
