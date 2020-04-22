@@ -327,9 +327,13 @@ double getMultiplicator( uint32_t range ) {
 void setChannel(int newChannel) {
   ch = newChannel;
   if (ch > MAX_CH || ch < 1) ch = 1;
-  preferences.begin("packetmonitor32", false);
-  preferences.putUInt("channel", ch);
-  preferences.end();
+  // avoid to write too much on the flash in auto-switching mode
+  if (autoChMode == 0) {
+        preferences.begin("packetmonitor32", false);
+        preferences.putUInt("channel", ch);
+        preferences.end();
+        }
+
   //esp_wifi_set_promiscuous(false);
   esp_wifi_set_promiscuous(true);
   esp_wifi_set_channel(ch, WIFI_SECOND_CHAN_NONE);
