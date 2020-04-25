@@ -40,7 +40,7 @@
 
 #include <Preferences.h>
 #define MAX_CH 13     // 1-14ch(1-11 US,1-13 EU and 1-14 Japan)
-#define AUTO_CHANNEL_INTERVAL 30000 // how often to switch channels automatically, in milliseconds
+#define AUTO_CHANNEL_INTERVAL 15000 // how often to switch channels automatically, in milliseconds
 //#define SNAP_LEN 2324 // max len of each recieved packet
 #define SNAP_LEN 2324 // limit packet capture for eapol
 #define USE_SD_BY_DEFAULT true
@@ -77,7 +77,8 @@ uint32_t lastAutoSwitchChTime = 0;
 int autoChannels[] = {1, 6, 11};     
 int AUTO_CH_COUNT = sizeof(autoChannels) / sizeof(int);
 int autoChIndex = 0;
-uint8_t autoChMode = 0 ; // 0 No auto -  1 Switch channels automatically 
+int smartCh_old_stuff = 0;
+uint8_t autoChMode = 0 ; // 0 No auto -  1 Switch channels automatically   - Smart Switch 
 uint32_t tmpPacketCounter;
 uint32_t pkts[MAX_X+1]; // here the packets per second will be saved
 uint32_t deauths = 0; // deauth frames per second
@@ -348,6 +349,28 @@ void autoSwitchChannel(uint32_t currentTime) {
   Serial.println(ch);
   lastAutoSwitchChTime = currentTime;
 }
+
+void smartSwitchChannel(uint32_t currentTime) {
+  lastAutoSwitchChTime = currentTime;
+  
+  if (smartCh_old_stuff < ssid_count+total_eapol+total_deauths) {
+      smartCh_old_stuff = ssid_count+total_eapol+total_deauths;
+      Serial.println(" Interesting channel new stuff detected :) ");
+
+        
+  } else { 
+    smartCh_old_stuff = ssid_count+total_eapol+total_deauths;
+      ch = (ch + 1) % (MAX_CH + 1);
+      setChannel(ch);
+      Serial.print(" Boring, smart-switching to channel ");
+      Serial.println(ch);
+
+   
+         }
+    
+}
+
+
 
 // ===== functions ===================================================
 bool setupSD() {
@@ -823,6 +846,15 @@ void coreTask( void * p ) {
          }
     }
   
+   if (autoChMode==2) {
+
+        if ( currentTime - lastAutoSwitchChTime > AUTO_CHANNEL_INTERVAL ) {
+            smartSwitchChannel(currentTime);
+            needDraw = true;
+         }
+    }
+  
+
 
     if ( currentTime - lastButtonTime > 100 ) {
   
@@ -873,7 +905,7 @@ void coreTask( void * p ) {
         needDraw = true;
           } else if (M5.BtnC.wasReleasefor(700)) {
               autoChMode++;
-              if (autoChMode>1) autoChMode=0;
+              if (autoChMode>2) autoChMode=0;
               Serial.println(autoChMode);
           }
 
