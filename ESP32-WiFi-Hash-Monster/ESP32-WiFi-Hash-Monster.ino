@@ -24,9 +24,11 @@
 // SD : GPIO4=CS(CD/D3), 23=MOSI(CMD), 18=CLK, 19=MISO(D0)
 //--------------------------------------------------------------------
 #ifdef ARDUINO_M5STACK_Core2
-  #include <M5Core2.h>        // https://github.com/m5stack/M5Core2/
+  //#include <M5Core2.h>        // https://github.com/m5stack/M5Core2/
+  #include <ESP32-Chimera-Core.h>        // https://github.com/m5stack/M5Stack/    (use version => 0.3.0 to properly display the Monster)
 #else
   #include <M5Stack.h>        // https://github.com/m5stack/M5Stack/    (use version => 0.3.0 to properly display the Monster)
+  //#include <ESP32-Chimera-Core.h>        // https://github.com/m5stack/M5Stack/    (use version => 0.3.0 to properly display the Monster)
 #endif
 #include <M5StackUpdater.h> // https://github.com/tobozo/M5Stack-SD-Updater/
 #include "Free_Fonts.h"
@@ -383,12 +385,18 @@ void smartSwitchChannel(uint32_t currentTime) {
 
 
 // ===== functions ===================================================
+
+static bool SDSetupDone = false;
+
 bool setupSD() {
+  if( SDSetupDone ) return true;
   if (!SD.begin( TFCARD_CS_PIN )) {
+    SDSetupDone = false;
     Serial.println("Card Mount Failed"); return false;
   }
   uint8_t cardType = SD.cardType();
   if (cardType == CARD_NONE) {
+    SDSetupDone = false;
     Serial.println("No SD_MMC card attached"); return false;
   }
   Serial.print("SD_MMC Card Type: ");
@@ -403,6 +411,7 @@ bool setupSD() {
   }
   uint64_t cardSize = SD.cardSize() / (1024 * 1024);
   Serial.printf("SD_MMC Card Size: %lluMB\n", cardSize);
+  SDSetupDone = true;
   return true;
 }
 
