@@ -13,17 +13,21 @@ extern bool useSD;
 class Buffer {
   public:
     Buffer();
-    void open(fs::FS* fs);
+    void checkFS(fs::FS* fs);
+    bool open(fs::FS* fs);
     void close(fs::FS* fs);
     void addPacket(uint8_t* buf, uint32_t len);
     void save(fs::FS* fs);
     void forceSave(fs::FS* fs);
+
+
+
   private:
     void write(int32_t n);
     void write(uint32_t n);
     void write(uint16_t n);
     void write(uint8_t* buf, uint32_t len);
-    
+
     uint8_t* bufA;
     uint8_t* bufB;
 
@@ -34,7 +38,9 @@ class Buffer {
     bool useA = true; // writing to bufA or bufB
     bool saving = false; // currently saving onto the SD card
 
-    String fileName = "/0.pcap";
+    char fileNameStr[32] = {0};
+    const char *folderName = "/pcap"; // no trailing slash
+    const char *fileNameTpl = "%s/%04X.pcap"; // hex is better for natural sorting, assume max 65536 files
     File file;
 };
 

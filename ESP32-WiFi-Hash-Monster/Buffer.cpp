@@ -5,23 +5,41 @@ Buffer::Buffer(){
   bufB = (uint8_t*)malloc(BUF_SIZE);
 }
 
-void Buffer::open(fs::FS* fs){
-  int i=0;
-  do{
-    fileName = "/"+(String)i+".pcap";
-    i++;
-  } while(fs->exists(fileName));
+void Buffer::checkFS(fs::FS* fs) {
+  if( !fs->exists( folderName ) ) {
+    fs->mkdir( folderName );
+  }
+}
 
-  Serial.println(fileName);
-  
-  file = fs->open(fileName, FILE_WRITE);
+
+bool Buffer::open(fs::FS* fs){
+  int i=0;
+  fileNameStr[0] = 0;
+
+  do {
+    sprintf( fileNameStr, fileNameTpl, folderName, i );
+    i++;
+    if( i > 0xffff ) {
+      log_e("Max files per folder exceeded, aborting !");
+      return false;
+    }
+  } while(fs->exists( fileNameStr ));
+
+  Serial.println( fileNameStr );
+
+  file = fs->open( fileNameStr, FILE_WRITE);
   file.close();
+
+  if( !fs->exists( fileNameStr ) ) {
+    // SD Card full or not inserted
+    return false;
+  }
 
   bufSizeA = 0;
   bufSizeB = 0;
-  
+
   writing = true;
-  
+
   write(uint32_t(0xa1b2c3d4)); // magic number
   write(uint16_t(2)); // major version number
   write(uint16_t(4)); // minor version number
@@ -31,6 +49,7 @@ void Buffer::open(fs::FS* fs){
   write(uint32_t(105)); // data link type
 
   useSD = true;
+  return true;
 }
 
 void Buffer::close(fs::FS* fs){
@@ -41,13 +60,13 @@ void Buffer::close(fs::FS* fs){
 }
 
 void Buffer::addPacket(uint8_t* buf, uint32_t len){
-  
+
   // buffer is full -> drop packet
   if((useA && bufSizeA + len >= BUF_SIZE && bufSizeB > 0) || (!useA && bufSizeB + len >= BUF_SIZE && bufSizeA > 0)){
-    Serial.print(";"); 
+    Serial.print(";");
     return;
   }
-  
+
   if(useA && bufSizeA + len + 16 >= BUF_SIZE && bufSizeB == 0){
     useA = false;
     Serial.println("\nswitched to buffer B");
@@ -61,12 +80,12 @@ void Buffer::addPacket(uint8_t* buf, uint32_t len){
   uint32_t seconds = (microSeconds/1000)/1000; // e.g. 45200400/1000/1000 = 45200 / 1000 = 45s
 
   microSeconds -= seconds*1000*1000; // e.g. 45200400 - 45*1000*1000 = 45200400 - 45000000 = 400us (because we only need the offset)
-  
+
   write(seconds); // ts_sec
   write(microSeconds); // ts_usec
   write(len); // incl_len
   write(len); // orig_len
-  
+
   write(buf, len); // packet payload
 }
 
@@ -97,7 +116,7 @@ void Buffer::write(uint16_t n){
 
 void Buffer::write(uint8_t* buf, uint32_t len){
   if(!writing) return;
-  
+
   if(useA){
     memcpy(&bufA[bufSizeA], buf, len);
     bufSizeA += len;
@@ -115,23 +134,23 @@ void Buffer::save(fs::FS* fs){
     //Serial.printf("useA: %s, bufA %u, bufB %u\n",useA ? "true" : "false",bufSizeA,bufSizeB); // for debug porpuses
     return;
   }
-  
+
   Serial.println("saving file");
-  
+
   uint32_t startTime = millis();
   uint32_t finishTime;
 
-  file = fs->open(fileName, FILE_APPEND);
+  file = fs->open( fileNameStr, FILE_APPEND);
   if (!file) {
-    Serial.println("Failed to open file '"+fileName+"'");
+    Serial.printf("Failed to open file %s\n", fileNameStr );
     useSD = false;
     return;
   }
-  
+
   saving = true;
-  
+
   uint32_t len;
-  
+
   if(useA){
     file.write(bufB, bufSizeB);
     len = bufSizeB;
@@ -144,29 +163,29 @@ void Buffer::save(fs::FS* fs){
   }
 
   file.close();
-  
+
   finishTime = millis() - startTime;
 
   Serial.printf("\n%u bytes written for %u ms\n", len, finishTime);
-  
+
   saving = false;
-  
+
 }
 
 void Buffer::forceSave(fs::FS* fs){
   uint32_t len = bufSizeA + bufSizeB;
   if(len == 0) return;
-  
-  file = fs->open(fileName, FILE_APPEND);
+
+  file = fs->open(fileNameStr, FILE_APPEND);
   if (!file) {
-    Serial.println("Failed to open file '"+fileName+"'");
+    Serial.printf("Failed to open file %s\n", fileNameStr);
     useSD = false;
     return;
   }
 
   saving = true;
   writing = false;
-  
+
   if(useA){
 
     if(bufSizeB > 0){
@@ -178,19 +197,19 @@ void Buffer::forceSave(fs::FS* fs){
       file.write(bufA, bufSizeA);
       bufSizeA = 0;
     }
-    
+
   } else {
 
     if(bufSizeA > 0){
       file.write(bufA, bufSizeA);
       bufSizeA = 0;
     }
-    
+
     if(bufSizeB > 0){
       file.write(bufB, bufSizeB);
       bufSizeB = 0;
     }
-    
+
   }
 
   file.close();

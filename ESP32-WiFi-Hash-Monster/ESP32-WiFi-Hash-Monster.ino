@@ -27,8 +27,8 @@
   //#include <M5Core2.h>        // https://github.com/m5stack/M5Core2/
   #include <ESP32-Chimera-Core.h>        // https://github.com/m5stack/M5Stack/    (use version => 0.3.0 to properly display the Monster)
 #else
-  #include <M5Stack.h>        // https://github.com/m5stack/M5Stack/    (use version => 0.3.0 to properly display the Monster)
-  //#include <ESP32-Chimera-Core.h>        // https://github.com/m5stack/M5Stack/    (use version => 0.3.0 to properly display the Monster)
+  //#include <M5Stack.h>        // https://github.com/m5stack/M5Stack/    (use version => 0.3.0 to properly display the Monster)
+  #include <ESP32-Chimera-Core.h>        // https://github.com/tobozo/ESP32-Chimera-Core/
 #endif
 #include <M5StackUpdater.h> // https://github.com/tobozo/M5Stack-SD-Updater/
 #include "Free_Fonts.h"
@@ -154,7 +154,8 @@ void setup() {
   #endif
   M5.begin(); // this will fire Serial.begin()
   // New SD Updater support, requires the latest version of https://github.com/tobozo/M5Stack-SD-Updater/
-  checkSDUpdater();
+  //checkSDUpdater();
+  checkSDUpdater( SD, MENU_BIN, 1500 ); // Filesystem, Launcher bin path, Wait delay
   // SD card ---------------------------------------------------------
   bool toggle = false;
   unsigned long lastcheck = millis();
@@ -230,13 +231,20 @@ void setup() {
   M5.Lcd.pushImage(200, 158, 64, 64, (uint16_t*)love_64);
   delay( 3000 );
 
-  sdBuffer = Buffer();
-
   if (useSD) Serial.println("pues esta encendido");
 
+  sdBuffer = Buffer();
+
   if (setupSD()){
-    sdBuffer.open(&SD);
-    Serial.println(" SD CHECK OPEN");
+    sdBuffer.checkFS(&SD);
+    if( sdBuffer.open(&SD) ) {
+      Serial.println(" SD CHECK OPEN");
+    } else {
+      Serial.println(" SD ERROR, Can't create file");
+      useSD = false;
+    }
+  } else {
+
   }
 
   if (useSD) {
@@ -903,8 +911,13 @@ void coreTask( void * p ) {
           useSD = false;
           sdBuffer.close(&SD);
         } else {
-          if (setupSD())
-            sdBuffer.open(&SD);
+          if (setupSD()) {
+            if( !sdBuffer.open(&SD) ) {
+              Serial.println(" SD ERROR, Can't create file, disabling SD");
+              SDSetupDone = false; // resetting SD state but this is not enough
+              useSD = false; // disable SD for the meantime
+            }
+          }
         }
         needDraw = true;
       }
