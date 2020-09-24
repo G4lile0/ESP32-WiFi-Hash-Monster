@@ -149,11 +149,7 @@ void setup() {
   M5.begin(); // this will fire Serial.begin()
   Wire.begin();
   // SD Updater support
-  if(digitalRead(BUTTON_A_PIN) == 0) {
-    Serial.println("Will Load menu binary");
-    updateFromFS(SD);
-    ESP.restart();
-  }
+  checkSDUpdater();
   
   // SD card ---------------------------------------------------------
   bool toggle = false;
