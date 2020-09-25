@@ -23,7 +23,7 @@ Short press on the second button will change the display backlight brighness, lo
 
 Short press on the third button will change WiFi Channel, long press will enable **Auto-Channel** or **Smart-Channel** modes. 
 
-**Auto-Channel**  hop between channesl 1,6 and after 15 seconds. 
+**Auto-Channel**  hop between channels 1,6 and after 15 seconds. 
 
 **Smart-Channel**  cover all the channels sequentially, but only hop if there is not new SSID, EAPOL or DEAUTHS after 15 seconds. 
 
