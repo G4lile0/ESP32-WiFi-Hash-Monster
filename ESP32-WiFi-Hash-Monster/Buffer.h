@@ -3,7 +3,7 @@
 
 #include "Arduino.h"
 #include "FS.h"
-#include "SD_MMC.h"
+//#include "SD_MMC.h"
 
 #define BUF_SIZE 24 * 1024
 #define SNAP_LEN 2324 // max len of each recieved packet

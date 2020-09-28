@@ -154,7 +154,6 @@ void setup() {
   #endif
   M5.begin(); // this will fire Serial.begin()
   // New SD Updater support, requires the latest version of https://github.com/tobozo/M5Stack-SD-Updater/
-  //checkSDUpdater();
   checkSDUpdater( SD, MENU_BIN, 1500 ); // Filesystem, Launcher bin path, Wait delay
   // SD card ---------------------------------------------------------
   bool toggle = false;
@@ -398,8 +397,13 @@ static bool SDSetupDone = false;
 
 bool setupSD() {
   if( SDSetupDone ) return true;
-  if (!SD.begin( TFCARD_CS_PIN )) {
-    SDSetupDone = false;
+  SD.end();
+  int attempts = 20;
+  do {
+    SDSetupDone = SD.begin( TFCARD_CS_PIN );
+  } while( --attempts > 0 && ! SDSetupDone );
+
+  if (!SDSetupDone ) {
     Serial.println("Card Mount Failed"); return false;
   }
   uint8_t cardType = SD.cardType();
