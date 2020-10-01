@@ -730,8 +730,10 @@ if (autoChMode == 2) { p = "S:"+(String)ch + "|AP:" + (String)ssid_count + "|Pkt
   }
   units1.pushSprite( 0, 20 );
 
-
-  //graph2.setBitmapColor( TFT_GREEN, TFT_BLACK );
+  #ifdef ARDUINO_M5STACK_FIRE
+  graph2.setBitmapColor( TFT_GREEN, TFT_BLACK );
+  #endif
+  
   graph2.drawLine(0, 0, MAX_X, 0, 1);// MAX LINE DRAW
 
   for (int i = 40; i < MAX_X; i++) {                  // LINE DRAW
