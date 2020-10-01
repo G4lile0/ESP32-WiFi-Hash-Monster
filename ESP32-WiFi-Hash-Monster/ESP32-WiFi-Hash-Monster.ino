@@ -23,13 +23,10 @@
 // Button : click to change channel hold to dis/enable SD
 // SD : GPIO4=CS(CD/D3), 23=MOSI(CMD), 18=CLK, 19=MISO(D0)
 //--------------------------------------------------------------------
-#ifdef ARDUINO_M5STACK_Core2
-  //#include <M5Core2.h>        // https://github.com/m5stack/M5Core2/
-  #include <ESP32-Chimera-Core.h>        // https://github.com/m5stack/M5Stack/    (use version => 0.3.0 to properly display the Monster)
-#else
-  //#include <M5Stack.h>        // https://github.com/m5stack/M5Stack/    (use version => 0.3.0 to properly display the Monster)
-  #include <ESP32-Chimera-Core.h>        // https://github.com/tobozo/ESP32-Chimera-Core/
-#endif
+//#include <M5Core2.h>        // https://github.com/m5stack/M5Core2/
+//#include <M5Stack.h>        // https://github.com/m5stack/M5Stack/    (use version => 0.3.0 to properly display the Monster)
+#include <ESP32-Chimera-Core.h>        // https://github.com/tobozo/ESP32-Chimera-Core/
+
 #include <M5StackUpdater.h> // https://github.com/tobozo/M5Stack-SD-Updater/
 #include "Free_Fonts.h"
 #include <SPI.h>
@@ -154,7 +151,7 @@ void setup() {
   #endif
   M5.begin(); // this will fire Serial.begin()
   // New SD Updater support, requires the latest version of https://github.com/tobozo/M5Stack-SD-Updater/
-  checkSDUpdater( SD, MENU_BIN, 1500 ); // Filesystem, Launcher bin path, Wait delay
+  checkSDUpdater( /*SD, MENU_BIN, 1500*/ ); // Filesystem, Launcher bin path, Wait delay
   // SD card ---------------------------------------------------------
   bool toggle = false;
   unsigned long lastcheck = millis();
@@ -168,6 +165,7 @@ void setup() {
     if( lastcheck + 60000 < millis() ) {
       //Serial.println( GOTOSLEEP_MESSAGE );
       #ifdef ARDUINO_M5STACK_Core2
+        M5.Axp.SetLcdVoltage(2500);
         M5.Axp.DeepSleep();
       #else
         M5.setWakeupButton( BUTTON_B_PIN );
@@ -476,10 +474,10 @@ struct SnifferPacket{
 
 char * wifi_sniffer_packet_type2str(wifi_promiscuous_pkt_type_t type) {
   switch(type) {
-    case WIFI_PKT_MGMT: return "MGMT";
-    case WIFI_PKT_DATA: return "DATA";
+    case WIFI_PKT_MGMT: return (char*)"MGMT";
+    case WIFI_PKT_DATA: return (char*)"DATA";
   default:
-    case WIFI_PKT_MISC: return "MISC";
+    case WIFI_PKT_MISC: return (char*)"MISC";
   }
 }
 
