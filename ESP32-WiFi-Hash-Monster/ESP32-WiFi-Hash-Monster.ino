@@ -14,7 +14,7 @@
 //     * Channel => BtnC (C for Channel)
 //   - seamless Odroid-GO support (if using https://github.com/tobozo/ESP32-Chimera-Core instead of M5Stack Core)
 //  added channel auto-switching (configurable) and reduce the amount of drawing by scriptguru  10/April/2020
-//     
+//
 //
 //  more info https://miloserdov.org/?p=1047
 //  more info https://www.evilsocket.net/2019/02/13/Pwning-WiFi-networks-with-bettercap-and-the-PMKID-client-less-attack/
@@ -23,7 +23,10 @@
 // Button : click to change channel hold to dis/enable SD
 // SD : GPIO4=CS(CD/D3), 23=MOSI(CMD), 18=CLK, 19=MISO(D0)
 //--------------------------------------------------------------------
-#include <M5Stack.h>        // https://github.com/m5stack/M5Stack/    (use version => 0.3.0 to properly display the Monster) 
+//#include <M5Core2.h>        // https://github.com/m5stack/M5Core2/
+//#include <M5Stack.h>        // https://github.com/m5stack/M5Stack/    (use version => 0.3.0 to properly display the Monster)
+#include <ESP32-Chimera-Core.h>        // https://github.com/tobozo/ESP32-Chimera-Core/
+
 #include <M5StackUpdater.h> // https://github.com/tobozo/M5Stack-SD-Updater/
 #include "Free_Fonts.h"
 #include <SPI.h>
@@ -74,11 +77,11 @@ bool useSD = USE_SD_BY_DEFAULT;
 uint32_t lastDrawTime = 0;
 uint32_t lastButtonTime = 0;
 uint32_t lastAutoSwitchChTime = 0;
-int autoChannels[] = {1, 6, 11};     
+int autoChannels[] = {1, 6, 11};
 int AUTO_CH_COUNT = sizeof(autoChannels) / sizeof(int);
 int autoChIndex = 0;
 int smartCh_old_stuff = 0;
-uint8_t autoChMode = 0 ; // 0 No auto -  1 Switch channels automatically   - Smart Switch 
+uint8_t autoChMode = 0 ; // 0 No auto -  1 Switch channels automatically   - Smart Switch
 uint32_t tmpPacketCounter;
 uint32_t pkts[MAX_X+1]; // here the packets per second will be saved
 uint32_t deauths = 0; // deauth frames per second
@@ -93,7 +96,7 @@ unsigned int ch = 1;  // current 802.11 channel
 unsigned int old_ch = 20;  // old  802.11 channel
 unsigned int bright = 100;  // default
 unsigned int bright_leds = 100;  // default
-unsigned int led_status = 0;  
+unsigned int led_status = 0;
 unsigned int ledPacketCounter = 0;
 
 int rssiSum;
@@ -112,7 +115,7 @@ int grid = 0;
 int tcount = 0;
 
 char    last_ssid[33];
-int8_t  last_rssi;  
+int8_t  last_rssi;
 char  last_eapol_ssid[33];
 
 
@@ -134,10 +137,10 @@ struct ssid_info {
  * Global variables for storing beacons and clients
  */
 ssid_info ssid_known[MAX_SSIDs];
-uint32_t ssid_count = 0;  // 
+uint32_t ssid_count = 0;  //
 uint32_t ssid_eapol_count= 0;       // eapol frames per second
 
- 
+
 // ===== main program ================================================
 void setup() {
   #ifdef ARDUINO_M5STACK_FIRE
@@ -147,28 +150,27 @@ void setup() {
     FastLED.show();
   #endif
   M5.begin(); // this will fire Serial.begin()
-  Wire.begin();
-  // SD Updater support
-  if(digitalRead(BUTTON_A_PIN) == 0) {
-    Serial.println("Will Load menu binary");
-    updateFromFS(SD);
-    ESP.restart();
-  }
-  
+  // New SD Updater support, requires the latest version of https://github.com/tobozo/M5Stack-SD-Updater/
+  checkSDUpdater( /*SD, MENU_BIN, 1500*/ ); // Filesystem, Launcher bin path, Wait delay
   // SD card ---------------------------------------------------------
   bool toggle = false;
   unsigned long lastcheck = millis();
   M5.Lcd.fillScreen(TFT_BLACK);
   while( !SD.begin( TFCARD_CS_PIN ) ) {
     toggle = !toggle;
-    M5.Lcd.setTextColor( toggle ? BLACK : WHITE );
+    M5.Lcd.setTextColor( toggle ? TFT_BLACK : TFT_WHITE );
     M5.Lcd.drawString( "INSERT SD", 160, 84, 2 );
     delay( toggle ? 300 : 500 );
     // go to sleep after a minute, no need to hammer the SD Card reader
     if( lastcheck + 60000 < millis() ) {
       //Serial.println( GOTOSLEEP_MESSAGE );
-      M5.setWakeupButton( BUTTON_B_PIN );
-      M5.powerOFF();
+      #ifdef ARDUINO_M5STACK_Core2
+        M5.Axp.SetLcdVoltage(2500);
+        M5.Axp.DeepSleep();
+      #else
+        M5.setWakeupButton( BUTTON_B_PIN );
+        M5.powerOFF();
+      #endif
     }
   }
 
@@ -181,14 +183,14 @@ void setup() {
   nvs_flash_init();
   tcpip_adapter_init();
 
-  //  wificfg.wifi_task_core_id = 0;  
-  
+  //  wificfg.wifi_task_core_id = 0;
+
   Serial.println("flash init //tcp init");
-  
+
   wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
   ESP_ERROR_CHECK(esp_event_loop_init(event_handler, NULL));
   ESP_ERROR_CHECK(esp_wifi_init(&cfg));
-  //ESP_ERROR_CHECK(esp_wifi_set_country(WIFI_COUNTRY_EU));  
+  //ESP_ERROR_CHECK(esp_wifi_set_country(WIFI_COUNTRY_EU));
   Serial.println("2");
   ESP_ERROR_CHECK(esp_wifi_set_storage(WIFI_STORAGE_RAM));
   Serial.println("3");
@@ -200,16 +202,21 @@ void setup() {
   Serial.println("6 ");
   ESP_ERROR_CHECK(esp_wifi_set_promiscuous(true));
   Serial.println("7 ");
-  // now switch on monitor mode    
+  // now switch on monitor mode
   // ESP_ERROR_CHECK(esp_wifi_set_channel(ch, WIFI_SECOND_CHAN_NONE));
   Serial.println("8 ");
   Serial.println("wifi done");
   delay(1000);
-  
+
   // display -------------------------------------------------------
-  M5.Speaker.write(0); // Speaker OFF
+  #ifdef ARDUINO_M5STACK_Core2
+    // specific M5Core tweaks go here
+  #else
+    M5.Speaker.write(0); // Speaker OFF
+  #endif
+
   M5.Lcd.clear();
-  M5.Lcd.setTextColor(WHITE, BLACK);
+  M5.Lcd.setTextColor(TFT_WHITE, TFT_BLACK);
   M5.Lcd.setTextSize(0);
   /* show start screen */
   M5.Lcd.setFreeFont(FM12);
@@ -218,23 +225,30 @@ void setup() {
   M5.Lcd.drawString( "90% PacketMonitor32", 6, 74);
   M5.Lcd.drawString( "by @Spacehuhn", 29, 94);
   M5.Lcd.setSwapBytes(true);
-  M5.Lcd.pushImage(200, 158, 64, 64, love_64);
+  M5.Lcd.pushImage(200, 158, 64, 64, (uint16_t*)love_64);
   delay( 3000 );
-
-  sdBuffer = Buffer();
 
   if (useSD) Serial.println("pues esta encendido");
 
+  sdBuffer = Buffer();
+
   if (setupSD()){
-    sdBuffer.open(&SD);
-    Serial.println(" SD CHECK OPEN");
+    sdBuffer.checkFS(&SD);
+    if( sdBuffer.open(&SD) ) {
+      Serial.println(" SD CHECK OPEN");
+    } else {
+      Serial.println(" SD ERROR, Can't create file");
+      useSD = false;
+    }
+  } else {
+
   }
 
   if (useSD) {
     Serial.println("pues esta encendido2");
   }
   useSD = USE_SD_BY_DEFAULT;
- 
+
   // second core ----------------------------------------------------
 
   // Create a sprite for the header
@@ -260,8 +274,8 @@ void setup() {
 
   // Create a sprite for the graph2
   graph2.setColorDepth(1);
-  graph2.setBitmapColor(TFT_GREEN, TFT_BLACK);
   graph2.createSprite(MAX_X-40, 100);
+  graph2.setBitmapColor(TFT_ORANGE, TFT_BLACK);
   graph2.fillSprite(TFT_BLACK);
 
   // create a sprite for units1
@@ -273,14 +287,17 @@ void setup() {
   // create a sprite for units2
   units2.setColorDepth(8);
   units2.createSprite(52, 64);
-  units2.fillSprite(TFT_BLACK);  
+  units2.fillSprite(TFT_BLACK);
 
   // Create a sprite for the monster
   face1.setColorDepth(16);
   face1.createSprite(64, 64);
   face1.fillSprite(TFT_BLACK); // Note: Sprite is filled with black when created
-  face1.setSwapBytes(false);
-
+  #ifdef _CHIMERA_CORE_
+    face1.setSwapBytes(true);
+  #else
+    face1.setSwapBytes(false);
+  #endif
   M5.Lcd.clear();
 
   // The scroll area is set to the full sprite size upon creation of the sprite
@@ -352,33 +369,44 @@ void autoSwitchChannel(uint32_t currentTime) {
 
 void smartSwitchChannel(uint32_t currentTime) {
   lastAutoSwitchChTime = currentTime;
-  
+
   if (smartCh_old_stuff < ssid_count+total_eapol+total_deauths) {
       smartCh_old_stuff = ssid_count+total_eapol+total_deauths;
       Serial.println(" Interesting channel new stuff detected :) ");
 
-        
-  } else { 
+
+  } else {
     smartCh_old_stuff = ssid_count+total_eapol+total_deauths;
       ch = (ch + 1) % (MAX_CH + 1);
       setChannel(ch);
       Serial.print(" Boring, smart-switching to channel ");
       Serial.println(ch);
 
-   
+
          }
-    
+
 }
 
 
 
 // ===== functions ===================================================
+
+static bool SDSetupDone = false;
+
 bool setupSD() {
-  if (!SD.begin( TFCARD_CS_PIN )) {
+  if( SDSetupDone ) return true;
+  SD.end();
+  int attempts = 20;
+  do {
+    SDSetupDone = SD.begin( TFCARD_CS_PIN );
+  } while( --attempts > 0 && ! SDSetupDone );
+
+  if (!SDSetupDone ) {
     Serial.println("Card Mount Failed"); return false;
   }
   uint8_t cardType = SD.cardType();
   if (cardType == CARD_NONE) {
+    SDSetupDone = false;
     Serial.println("No SD_MMC card attached"); return false;
   }
   Serial.print("SD_MMC Card Type: ");
@@ -393,6 +421,7 @@ bool setupSD() {
   }
   uint64_t cardSize = SD.cardSize() / (1024 * 1024);
   Serial.printf("SD_MMC Card Size: %lluMB\n", cardSize);
+  SDSetupDone = true;
   return true;
 }
 
@@ -445,10 +474,10 @@ struct SnifferPacket{
 
 char * wifi_sniffer_packet_type2str(wifi_promiscuous_pkt_type_t type) {
   switch(type) {
-    case WIFI_PKT_MGMT: return "MGMT";
-    case WIFI_PKT_DATA: return "DATA";
-  default:  
-    case WIFI_PKT_MISC: return "MISC";
+    case WIFI_PKT_MGMT: return (char*)"MGMT";
+    case WIFI_PKT_DATA: return (char*)"DATA";
+  default:
+    case WIFI_PKT_MISC: return (char*)"MISC";
   }
 }
 
@@ -478,20 +507,20 @@ void wifi_promiscuous(void* buf, wifi_promiscuous_pkt_type_t type) {
   if (type == WIFI_PKT_MISC) return;   // wrong packet type
   if (ctrl.sig_len > 293) return; // packet too long    if (ctrl.sig_len > SNAP_LEN) return;
   uint32_t packetLength = ctrl.sig_len;
-  if (type == WIFI_PKT_MGMT) packetLength -= 4; 
+  if (type == WIFI_PKT_MGMT) packetLength -= 4;
   // fix for known bug in the IDF
   // https://github.com/espressif/esp-idf/issues/886
   //Serial.print(".");
   tmpPacketCounter++;
   rssiSum += ctrl.rssi;
-  unsigned int u;    
-  
+  unsigned int u;
+
   if (type == WIFI_PKT_MGMT &&  (pkt->payload[0] == 0xA0 || pkt->payload[0] == 0xC0 )) {
     deauths++;
     //      if (useSD) sdBuffer.addPacket(pkt->payload, packetLength);
     // deauth
     #ifdef ARDUINO_M5STACK_FIRE
-      for (int pixelNumber = 5; pixelNumber < 10; pixelNumber++){    
+      for (int pixelNumber = 5; pixelNumber < 10; pixelNumber++){
         leds[pixelNumber].setRGB( bright_leds, 0, 0);;
       }
       FastLED.show();
@@ -500,10 +529,10 @@ void wifi_promiscuous(void* buf, wifi_promiscuous_pkt_type_t type) {
 
   if (( (pkt->payload[30] == 0x88 && pkt->payload[31] == 0x8e)|| ( pkt->payload[32] == 0x88 && pkt->payload[33] == 0x8e) )){
     eapol++;  // new eapol packets :)
-  
+
     #ifdef ARDUINO_M5STACK_FIRE
       // turn right led in green
-      for (int pixelNumber = 0; pixelNumber <= 4; pixelNumber++){    
+      for (int pixelNumber = 0; pixelNumber <= 4; pixelNumber++){
         leds[pixelNumber].setRGB(  0,bright_leds, 0);
       }
       FastLED.show();
@@ -511,11 +540,11 @@ void wifi_promiscuous(void* buf, wifi_promiscuous_pkt_type_t type) {
 
     Serial.println("eapol");
 
-    memcpy(&ssid_known[MAX_SSIDs-1].mac,pkt->payload+16,6);   // MAC source HW address 
-    
+    memcpy(&ssid_known[MAX_SSIDs-1].mac,pkt->payload+16,6);   // MAC source HW address
+
     for (u = 0; u < ssid_count; u++) {
       if (!memcmp(ssid_known[u].mac, ssid_known[MAX_SSIDs-1].mac, 6))  {
-        // only if is new print it 
+        // only if is new print it
         if (!ssid_known[u].ssid_eapol) {
           Serial.println("MAC encontrada");
           ssid_eapol_count++;
@@ -524,7 +553,7 @@ void wifi_promiscuous(void* buf, wifi_promiscuous_pkt_type_t type) {
           for(int i = 0; i < ssid_known[u].ssid_len ; i++) {
             last_eapol_ssid[i]=ssid_known[u].ssid[i];
           }
-          last_eapol_ssid[ssid_known[u].ssid_len+1]=0;                                                  
+          last_eapol_ssid[ssid_known[u].ssid_len+1]=0;
           Serial.println(last_eapol_ssid);
         }
         break;
@@ -555,7 +584,7 @@ void wifi_promiscuous(void* buf, wifi_promiscuous_pkt_type_t type) {
   //  frameSubType != SUBTYPE_PROBE_REQUEST ||
     frameSubType != SUBTYPE_PROBE_RESPONSE ||
     frameSubType != SUBTYPE_BEACONS ||
-    frameSubType != 0x0028  // QoS Data 
+    frameSubType != 0x0028  // QoS Data
     ) return;
   //if  (!((frameSubType == SUBTYPE_PROBE_RESPONSE) || (frameSubType == SUBTYPE_BEACONS ) || (frameSubType == 0x0028))) return;
   //if  ((frameSubType == SUBTYPE_PROBE_RESPONSE) || (frameSubType == SUBTYPE_BEACONS )) {
@@ -574,7 +603,7 @@ void wifi_promiscuous(void* buf, wifi_promiscuous_pkt_type_t type) {
     if (ascci_error) return;
 
     memcpy(&ssid_known[MAX_SSIDs-1].mac,pkt->payload+16,6);
-    
+
     bool known = false;
     for (u = 0; u < ssid_count; u++) {
       if (!memcmp(ssid_known[u].mac, ssid_known[MAX_SSIDs-1].mac, 6))  {
@@ -588,7 +617,7 @@ void wifi_promiscuous(void* buf, wifi_promiscuous_pkt_type_t type) {
       if (useSD) sdBuffer.addPacket(pkt->payload, packetLength);
       memcpy(&ssid_known[ssid_count].mac,&ssid_known[MAX_SSIDs-1].mac ,6);
       memcpy(&ssid_known[ssid_count].ssid,pkt->payload+38, SSID_length);
-      
+
       ssid_known[u].ssid_len=SSID_length;
       ssid_count++;
       Serial.print(" SSID count: ");
@@ -598,7 +627,7 @@ void wifi_promiscuous(void* buf, wifi_promiscuous_pkt_type_t type) {
       Serial.print(" SSID: ");
       printDataSpan(38, SSID_length, pkt->payload);
       Serial.print(" RSSI: ");
-      last_rssi = pkt->rx_ctrl.rssi;      
+      last_rssi = pkt->rx_ctrl.rssi;
       Serial.println(last_rssi);
     }
   }
@@ -611,7 +640,7 @@ void wifi_promiscuous(void* buf, wifi_promiscuous_pkt_type_t type) {
 
   // Only look for probe request packets
   // if (frameType != TYPE_MANAGEMENT ||
-  // frameSubType != SUBTYPE_PROBE_REQUEST 
+  // frameSubType != SUBTYPE_PROBE_REQUEST
   //  )
   //        return;
 
@@ -636,9 +665,9 @@ void wifi_promiscuous(void* buf, wifi_promiscuous_pkt_type_t type) {
 void draw() {
 
   int len, rssi;
-  if (pkts[MAX_X - 1] > 0) 
+  if (pkts[MAX_X - 1] > 0)
     rssi = rssiSum / (int)pkts[MAX_X - 1];
-  else 
+  else
     rssi = rssiSum;
 
   graph_RSSI= rssi;
@@ -649,7 +678,7 @@ void draw() {
   graph_deauths += deauths;
 
   String p;
-  
+
   if (autoChMode == 0) { p = "C:"+(String)ch + "|AP:" + (String)ssid_count + "|Pkts " +
      (String)tmpPacketCounter + "[" + (String)eapol + "]" + "["+ (String)deauths + "]" +
      (useSD ? "|SD" : "");
@@ -683,16 +712,16 @@ if (autoChMode == 2) { p = "S:"+(String)ch + "|AP:" + (String)ssid_count + "|Pkt
     maxval = noceil + toceil; // round it up
     multiplicator = 100 / maxval;
   }
-  
+
   double valstep = maxval / 5;
-  
+
   units1.setFreeFont(FM9);
   int s = 10, a = 0;
   units1.setTextColor( TFT_WHITE, TFT_BLACK );
   units1.setBitmapColor( TFT_WHITE, TFT_BLACK);  // Pkts Scale
   units1.setTextDatum(MR_DATUM);
   units1.fillSprite( TFT_BLACK );
-  
+
   for ( int ypos = MAX_Y, idx = 0; ypos > 70; ypos = ypos - s ){
     units1.drawString(String( int( idx * valstep ) ), 30, ypos - 1 - a - 20);
     //units1.drawString(String( (MAX_Y - ypos)*2 ), 30, ypos - 1 - a - 20);
@@ -702,21 +731,21 @@ if (autoChMode == 2) { p = "S:"+(String)ch + "|AP:" + (String)ssid_count + "|Pkt
   units1.pushSprite( 0, 20 );
 
 
-  graph2.setBitmapColor( TFT_GREEN, TFT_BLACK );
-  graph2.drawLine(0, 0, MAX_X, 0, GREEN);// MAX LINE DRAW
+  //graph2.setBitmapColor( TFT_GREEN, TFT_BLACK );
+  graph2.drawLine(0, 0, MAX_X, 0, 1);// MAX LINE DRAW
 
   for (int i = 40; i < MAX_X; i++) {                  // LINE DRAW
     len = pkts[i] * multiplicator;
     //len = len * 2;
     //if ( ((MAX_Y-toppos) - len) < ((MAX_Y-toppos) - 100)){ len = 100;}  // over flow
-    graph2.drawLine(i-40, 100, i-40, 1, TFT_BLACK);      // LINE ERASE
-    graph2.drawLine(i-40, 100, i-40, 100 - len, GREEN);// LINE DRAW
-    
+    graph2.drawLine(i-40, 100, i-40, 1, 0);      // LINE ERASE
+    graph2.drawLine(i-40, 100, i-40, 100 - len, 1);// LINE DRAW
+
     if (i < MAX_X - 1) pkts[i] = pkts[i + 1];
   }
 
   graph2.pushSprite( 40, MAX_Y-100 );
-  
+
   byte aleatorio; // = random (1,10);
 
   if ((deauths>0) && (eapol==0)) {
@@ -741,7 +770,7 @@ if (autoChMode == 2) { p = "S:"+(String)ch + "|AP:" + (String)ssid_count + "|Pkt
       default: face1.pushImage(0, 0, 64, 64, surprise_64); break;
     }
   }
-  
+
   if ((eapol==0) && (deauths==0) && (tmpPacketCounter>10)) {
     aleatorio = random (1,5);
     switch (aleatorio) {
@@ -751,7 +780,7 @@ if (autoChMode == 2) { p = "S:"+(String)ch + "|AP:" + (String)ssid_count + "|Pkt
       default: face1.pushImage(0, 0, 64, 64, happy4_64); break;
     }
   }
-  
+
   if (eapol>0)   {
     face1.pushImage(0, 0, 64, 64, love_64);
   }
@@ -774,7 +803,7 @@ void draw_RSSI() {
   units2.drawNumber( total_eapol, 44, 16,2);
   units2.setTextColor( TFT_RED, TFT_BLACK );
   units2.drawNumber( total_deauths, 44, 32, 2);
-  units2.setTextColor( TFT_WHITE, TFT_BLACK ); 
+  units2.setTextColor( TFT_WHITE, TFT_BLACK );
   units2.drawNumber( ssid_eapol_count, 44, 48, 2);
   units2.pushSprite( 268, 136 );
 
@@ -787,20 +816,20 @@ void draw_RSSI() {
   p = "New HS: "+(String)last_eapol_ssid;
   footer.drawString(p, 4 , 3+17);                 // string DRAW
   footer.pushSprite( 0, 138+32+32 );
- 
+
   // Draw point in graph1 sprite at far right edge (this will scroll left later)
   if (graph_RSSI != 0)  graph1.drawFastVLine(127+50,-(graph_RSSI/2),2,TFT_YELLOW); // draw 2 pixel point on graph
 
   if (graph_eapol>59) graph_eapol=0;
-  if (graph_eapol != 0)  graph1.drawFastVLine(127+50,60-constrain(graph_eapol,1,60),2,GREEN); // draw 2 pixel point on graph
- 
+  if (graph_eapol != 0)  graph1.drawFastVLine(127+50,60-constrain(graph_eapol,1,60),2,TFT_GREEN); // draw 2 pixel point on graph
+
   if (graph_deauths>59) graph_deauths=0;
-  if (graph_deauths != 0)  graph1.drawFastVLine(127+50,60-constrain(graph_deauths,1,60),2,RED); // draw 2 pixel point on graph
+  if (graph_deauths != 0)  graph1.drawFastVLine(127+50,60-constrain(graph_deauths,1,60),2,TFT_RED); // draw 2 pixel point on graph
 
   // write the channel on the scroll window.
   if (ch != old_ch){
     old_ch=ch;
-    graph1.setTextColor(TFT_WHITE,BLACK);
+    graph1.setTextColor(TFT_WHITE,TFT_BLACK);
     graph1.setFreeFont(FM9);
     graph1.drawString( "  ", 127+50-25,1);
     graph1.drawNumber(ch,127+50-17,1,2);
@@ -837,7 +866,7 @@ void coreTask( void * p ) {
     bool needDraw = false;
     currentTime = millis();
     /* bit of spaghetti code, have to clean this up later :D_ */
-    
+
     if (autoChMode==1) {
 
         if ( currentTime - lastAutoSwitchChTime > AUTO_CHANNEL_INTERVAL ) {
@@ -845,7 +874,7 @@ void coreTask( void * p ) {
             needDraw = true;
          }
     }
-  
+
    if (autoChMode==2) {
 
         if ( currentTime - lastAutoSwitchChTime > AUTO_CHANNEL_INTERVAL ) {
@@ -853,43 +882,48 @@ void coreTask( void * p ) {
             needDraw = true;
          }
     }
-  
+
 
 
     if ( currentTime - lastButtonTime > 100 ) {
-  
+
       M5.update();
-      // buttons assignment : 
+      // buttons assignment :
       //  - SD Activation => BtnA (A for Activation)
       //  - Brightness => BtnB (B for Brightness)
       //  - Channel => BtnC (C for Channel)
 
       if( M5.BtnA.wasReleased() ) {
-       
-          if (bright>1) { 
+
+          if (bright>1) {
               Serial.println("Incognito Mode");
               bright=0;
               bright_leds=0;
               M5.Lcd.setBrightness(bright);
-              
-            } else { 
+
+            } else {
               bright=100;
               bright_leds=100;
               M5.Lcd.setBrightness(bright);
               }
-        
-        
+
+
       } else if (M5.BtnA.wasReleasefor(700)) {
         if (useSD) {
           useSD = false;
           sdBuffer.close(&SD);
         } else {
-          if (setupSD())
-            sdBuffer.open(&SD);
+          if (setupSD()) {
+            if( !sdBuffer.open(&SD) ) {
+              Serial.println(" SD ERROR, Can't create file, disabling SD");
+              SDSetupDone = false; // resetting SD state but this is not enough
+              useSD = false; // disable SD for the meantime
+            }
+          }
         }
         needDraw = true;
       }
-      
+
       if( M5.BtnB.wasReleased() ) {
               bright+=50;
               if (bright>251) bright=0;
@@ -899,7 +933,7 @@ void coreTask( void * p ) {
               if (bright_leds>251) bright_leds=0;
               Serial.println(bright_leds);
           }
- 
+
       if( M5.BtnC.wasReleased() ) {
         setChannel(ch + 1);
         needDraw = true;
@@ -923,7 +957,7 @@ void coreTask( void * p ) {
     // draw Display
     if ( currentTime - lastDrawTime > 1000 ) {
       lastDrawTime = currentTime;
-      // Serial.printf("\nFree RAM %u %u\n", 
+      // Serial.printf("\nFree RAM %u %u\n",
       // heap_caps_get_minimum_free_size(MALLOC_CAP_8BIT),
       // heap_caps_get_minimum_free_size(MALLOC_CAP_32BIT));
       // for debug purposes
@@ -958,9 +992,9 @@ void blinky( void * p ) {
          leds[pixelNumber].setRGB(  0, 0, bright_leds);
       }
       led_status++;
-      if (led_status>M5STACK_FIRE_NEO_NUM_LEDS) 
+      if (led_status>M5STACK_FIRE_NEO_NUM_LEDS)
         led_status=0;
-      FastLED.show();         
+      FastLED.show();
     }
     int led_delay =1000;
     if (ledPacketCounter == 0) led_delay = 2000;
