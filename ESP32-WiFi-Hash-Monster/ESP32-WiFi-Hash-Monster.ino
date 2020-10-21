@@ -77,11 +77,12 @@ bool useSD = USE_SD_BY_DEFAULT;
 uint32_t lastDrawTime = 0;
 uint32_t lastButtonTime = millis();
 uint32_t lastAutoSwitchChTime = 0;
-int autoChannels[] = {1, 6, 11};
+int autoChannels[] = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13}; // customize this
 int AUTO_CH_COUNT = sizeof(autoChannels) / sizeof(int);
 int autoChIndex = 0;
 int smartCh_old_stuff = 0;
 uint8_t autoChMode = 0 ; // 0 No auto -  1 Switch channels automatically   - Smart Switch
+const char* authChmodeStr[3] = {"[C]hannel Fixed", "[A]utomatic switching", "[S]mart switching" };
 uint32_t tmpPacketCounter;
 uint32_t pkts[MAX_X+1]; // here the packets per second will be saved
 uint32_t deauths = 0; // deauth frames per second
@@ -380,7 +381,7 @@ double getMultiplicator( uint32_t range ) {
 
 // ===== functions ===================================================
 void setChannel(int newChannel) {
-  log_n("Setting new channel to : %d", newChannel );
+  log_d("Setting new channel to : %d", newChannel );
   ch = newChannel;
   if (ch > MAX_CH || ch < 1) ch = 1;
   // avoid to write too much on the flash in auto-switching mode
@@ -400,8 +401,7 @@ void setChannel(int newChannel) {
 void autoSwitchChannel(uint32_t currentTime) {
   autoChIndex = (autoChIndex + 1) % AUTO_CH_COUNT;
   setChannel(autoChannels[autoChIndex]);
-  Serial.print("Auto-switching to channel ");
-  Serial.println(ch);
+  Serial.printf("[A]uto-switching to channel %d\n", ch);
   lastAutoSwitchChTime = currentTime;
 }
 
@@ -411,11 +411,12 @@ void smartSwitchChannel(uint32_t currentTime) {
 
   if (smartCh_old_stuff < ssid_count+total_eapol+total_deauths) {
     smartCh_old_stuff = ssid_count+total_eapol+total_deauths;
-    Serial.printf("Channel #%d is interesting, collected %d packets so far :)\n", ch, smartCh_old_stuff);
+    Serial.printf("[S]mart-switching: Channel #%d is interesting, collected %d packets so far :)\n", ch, smartCh_old_stuff);
   } else {
-    Serial.printf("Channel #%d is boring, smart-switching\n", ch);
+    unsigned int oldchannel = ch;
     smartCh_old_stuff = ssid_count+total_eapol+total_deauths;
     ch = (ch + 1) % (MAX_CH + 1);
+    Serial.printf("[S]mart-switching: Channel #%d is boring, smart-switching to #%d\n", oldchannel, ch);
     setChannel(ch);
   }
 }
@@ -897,9 +898,8 @@ void draw_RSSI() {
 // ====== functions ===================================================
 void coreTask( void * p ) {
   uint32_t currentTime;
-  Serial.printf("Setting initial channel to %d\n", ch);
   setChannel(ch);
-  Serial.println("Channel set !");
+  Serial.printf("[C]urrent channel: %d\n", ch);
   tmpPacketCounter = 0; // reset to avoid overflow on first render
 
   while (true) {
@@ -970,7 +970,7 @@ void coreTask( void * p ) {
       } else if (M5.BtnC.wasReleasefor(700)) {
         autoChMode++;
         if (autoChMode>2) autoChMode=0;
-        Serial.printf("Channel hop mode is now: %d\n", autoChMode);
+        Serial.printf("Channel hop mode is now set to: %s\n", authChmodeStr[autoChMode] );
         preferences.begin("packetmonitor32", false);
         preferences.putUInt("autoChMode", autoChMode);
         preferences.end();
