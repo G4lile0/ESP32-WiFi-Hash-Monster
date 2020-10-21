@@ -75,7 +75,7 @@ Preferences preferences;
 bool useSD = USE_SD_BY_DEFAULT;
 
 uint32_t lastDrawTime = 0;
-uint32_t lastButtonTime = 0;
+uint32_t lastButtonTime = millis();
 uint32_t lastAutoSwitchChTime = 0;
 int autoChannels[] = {1, 6, 11};
 int AUTO_CH_COUNT = sizeof(autoChannels) / sizeof(int);
@@ -202,7 +202,8 @@ void setup() {
 
   // Settings
   preferences.begin("packetmonitor32", false);
-  ch = preferences.getUInt("channel", 1);
+  ch         = preferences.getUInt("channel",    1);
+  autoChMode = preferences.getUInt("autoChMode", 0);
   preferences.end();
 
   // System & WiFi ---------------------------------------------------
@@ -229,7 +230,7 @@ void setup() {
   ESP_ERROR_CHECK(esp_wifi_set_promiscuous(true));
   Serial.println("7 ");
   // now switch on monitor mode
-  // ESP_ERROR_CHECK(esp_wifi_set_channel(ch, WIFI_SECOND_CHAN_NONE));
+  ESP_ERROR_CHECK(esp_wifi_set_channel(ch, WIFI_SECOND_CHAN_NONE));
   Serial.println("8 ");
   Serial.println("wifi done");
   delay(1000);
@@ -333,6 +334,8 @@ void setup() {
     face1.setSwapBytes(false);
   #endif
   M5.Lcd.clear();
+  lastButtonTime = millis();
+  M5.update();
 
   // The scroll area is set to the full sprite size upon creation of the sprite
   // but we can change that by defining a smaller area using "setScrollRect()"if needed
@@ -377,6 +380,7 @@ double getMultiplicator( uint32_t range ) {
 
 // ===== functions ===================================================
 void setChannel(int newChannel) {
+  log_n("Setting new channel to : %d", newChannel );
   ch = newChannel;
   if (ch > MAX_CH || ch < 1) ch = 1;
   // avoid to write too much on the flash in auto-switching mode
@@ -407,13 +411,12 @@ void smartSwitchChannel(uint32_t currentTime) {
 
   if (smartCh_old_stuff < ssid_count+total_eapol+total_deauths) {
     smartCh_old_stuff = ssid_count+total_eapol+total_deauths;
-    Serial.println(" Interesting channel new stuff detected :) ");
+    Serial.printf("Channel #%d is interesting, collected %d packets so far :)\n", ch, smartCh_old_stuff);
   } else {
+    Serial.printf("Channel #%d is boring, smart-switching\n", ch);
     smartCh_old_stuff = ssid_count+total_eapol+total_deauths;
     ch = (ch + 1) % (MAX_CH + 1);
     setChannel(ch);
-    Serial.print(" Boring, smart-switching to channel ");
-    Serial.println(ch);
   }
 }
 
@@ -894,7 +897,7 @@ void draw_RSSI() {
 // ====== functions ===================================================
 void coreTask( void * p ) {
   uint32_t currentTime;
-  Serial.println("Setting default channel");
+  Serial.printf("Setting initial channel to %d\n", ch);
   setChannel(ch);
   Serial.println("Channel set !");
   tmpPacketCounter = 0; // reset to avoid overflow on first render
@@ -967,7 +970,10 @@ void coreTask( void * p ) {
       } else if (M5.BtnC.wasReleasefor(700)) {
         autoChMode++;
         if (autoChMode>2) autoChMode=0;
-        Serial.println(autoChMode);
+        Serial.printf("Channel hop mode is now: %d\n", autoChMode);
+        preferences.begin("packetmonitor32", false);
+        preferences.putUInt("autoChMode", autoChMode);
+        preferences.end();
       }
 
       lastButtonTime = currentTime;
