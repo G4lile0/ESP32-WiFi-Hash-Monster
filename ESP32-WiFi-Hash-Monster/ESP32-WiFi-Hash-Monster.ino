@@ -120,6 +120,32 @@ char  last_eapol_ssid[33];
 
 
 /*
+ * Convert Ethernet address to standard hex-digits-and-colons printable form.
+ * Re-entrant version (GNU extensions).
+ * Inspired from https://android.googlesource.com/platform/bionic/+/master/libc/bionic/ether_ntoa.c
+ */
+char *ether_ntoa_r( const uint8_t *addr, char * buf )
+{
+  snprintf( buf, 18, "%02x:%02x:%02x:%02x:%02x:%02x",
+    addr[0], addr[1],
+    addr[2], addr[3],
+    addr[4], addr[5]
+  );
+  return buf;
+}
+/*
+ * Convert Ethernet address to standard hex-digits-and-colons printable form.
+ * Inspired from https://android.googlesource.com/platform/bionic/+/master/libc/bionic/ether_ntoa.c
+ */
+char *ether_ntoa( const uint8_t *addr )
+{
+  static char buf[18];
+  return ether_ntoa_r( addr, buf );
+}
+
+
+
+/*
  * Data structure for beacon information
  */
 
@@ -210,7 +236,7 @@ void setup() {
 
   // display -------------------------------------------------------
   #ifdef ARDUINO_M5STACK_Core2
-    // specific M5Core tweaks go here
+    // specific M5Core2 tweaks go here
   #else
     M5.Speaker.write(0); // Speaker OFF
   #endif
@@ -241,7 +267,7 @@ void setup() {
       useSD = false;
     }
   } else {
-
+    // SD setup failed, card not inserted ?
   }
 
   if (useSD) {
@@ -254,39 +280,47 @@ void setup() {
   // Create a sprite for the header
   header.setColorDepth(1);
   header.createSprite(320, 20);
-  header.setBitmapColor(TFT_WHITE, TFT_BLUE);
-  header.fillSprite(TFT_BLUE);
   header.setFreeFont(FM9);
-  header.setTextDatum(TR_DATUM);
+  header.setTextColor( TFT_BLACK, TFT_BLUE ); // unintuitive: use black/blue mask
+  header.setTextDatum(TL_DATUM);
+  header.setBitmapColor( TFT_BLUE, TFT_WHITE ); // mask will be converted to this color
+  header.fillSprite(TFT_BLUE);
 
   // Create a sprite for the footer
   footer.setColorDepth(1);
   footer.createSprite(320, 40);
-  footer.setBitmapColor(TFT_WHITE, TFT_BLUE);
-  footer.fillSprite(TFT_BLUE);
   footer.setFreeFont(FM9);
-  footer.setTextDatum(TR_DATUM);
+  footer.setTextColor( TFT_BLACK, TFT_BLUE ); // unintuitive: use black/blue mask
+  footer.setTextDatum(TL_DATUM);
+  footer.setBitmapColor( TFT_BLUE, TFT_WHITE ); // mask will be converted to this color
+  footer.fillSprite(TFT_BLUE);
 
   // Create a sprite for the graph1
   graph1.setColorDepth(8);
   graph1.createSprite(128+50, 61); // graph1.pushSprite( 90, 138 );
+  graph1.setTextColor(TFT_WHITE,TFT_BLACK);
+  graph1.setFreeFont(FM9);
   graph1.fillSprite(TFT_BLACK);
 
   // Create a sprite for the graph2
   graph2.setColorDepth(1);
   graph2.createSprite(MAX_X-40, 100);
-  graph2.setBitmapColor(TFT_ORANGE, TFT_BLACK);
+  graph2.setBitmapColor( TFT_GREEN, TFT_BLACK );
   graph2.fillSprite(TFT_BLACK);
 
   // create a sprite for units1
   units1.setColorDepth(1);
-  units1.setBitmapColor(TFT_WHITE, TFT_BLACK);
   units1.createSprite(40, 120);
+  units1.setFreeFont(FM9);
+  units1.setTextColor( TFT_WHITE, TFT_BLACK );
+  units1.setBitmapColor( TFT_WHITE, TFT_BLACK);  // Pkts Scale
+  units1.setTextDatum(MR_DATUM);
   units1.fillSprite(TFT_BLACK);
 
   // create a sprite for units2
   units2.setColorDepth(8);
   units2.createSprite(52, 64);
+  units2.setTextDatum( TR_DATUM );
   units2.fillSprite(TFT_BLACK);
 
   // Create a sprite for the monster
@@ -347,17 +381,17 @@ void setChannel(int newChannel) {
   if (ch > MAX_CH || ch < 1) ch = 1;
   // avoid to write too much on the flash in auto-switching mode
   if (autoChMode == 0) {
-        preferences.begin("packetmonitor32", false);
-        preferences.putUInt("channel", ch);
-        preferences.end();
-        }
-
+    preferences.begin("packetmonitor32", false);
+    preferences.putUInt("channel", ch);
+    preferences.end();
+  }
   //esp_wifi_set_promiscuous(false);
   esp_wifi_set_promiscuous(true);
   esp_wifi_set_channel(ch, WIFI_SECOND_CHAN_NONE);
   esp_wifi_set_promiscuous_rx_cb(&wifi_promiscuous);
   //  esp_wifi_set_promiscuous(true);
 }
+
 
 void autoSwitchChannel(uint32_t currentTime) {
   autoChIndex = (autoChIndex + 1) % AUTO_CH_COUNT;
@@ -367,24 +401,20 @@ void autoSwitchChannel(uint32_t currentTime) {
   lastAutoSwitchChTime = currentTime;
 }
 
+
 void smartSwitchChannel(uint32_t currentTime) {
   lastAutoSwitchChTime = currentTime;
 
   if (smartCh_old_stuff < ssid_count+total_eapol+total_deauths) {
-      smartCh_old_stuff = ssid_count+total_eapol+total_deauths;
-      Serial.println(" Interesting channel new stuff detected :) ");
-
-
+    smartCh_old_stuff = ssid_count+total_eapol+total_deauths;
+    Serial.println(" Interesting channel new stuff detected :) ");
   } else {
     smartCh_old_stuff = ssid_count+total_eapol+total_deauths;
-      ch = (ch + 1) % (MAX_CH + 1);
-      setChannel(ch);
-      Serial.print(" Boring, smart-switching to channel ");
-      Serial.println(ch);
-
-
-         }
-
+    ch = (ch + 1) % (MAX_CH + 1);
+    setChannel(ch);
+    Serial.print(" Boring, smart-switching to channel ");
+    Serial.println(ch);
+  }
 }
 
 
@@ -476,21 +506,23 @@ char * wifi_sniffer_packet_type2str(wifi_promiscuous_pkt_type_t type) {
   switch(type) {
     case WIFI_PKT_MGMT: return (char*)"MGMT";
     case WIFI_PKT_DATA: return (char*)"DATA";
-  default:
+    default:
     case WIFI_PKT_MISC: return (char*)"MISC";
   }
 }
 
-
+/*
+// deprecated, see ether_ntoa()
 static void getMAC(char *addr, uint8_t* data, uint16_t offset) {
   sprintf(addr, "%02x:%02x:%02x:%02x:%02x:%02x", data[offset+0], data[offset+1], data[offset+2], data[offset+3], data[offset+4], data[offset+5]);
 }
+*/
 
 
-static void printDataSpan(uint16_t start, uint16_t size, uint8_t* data) {
+static void setLastSSID(uint16_t start, uint16_t size, uint8_t* data) {
   int u=0;
   for(uint16_t i = start; i < DATA_LENGTH && i < start+size; i++) {
-    Serial.write(data[i]);
+    //Serial.write(data[i]);
     last_ssid[u]=data[i];
     u++;
   }
@@ -538,30 +570,31 @@ void wifi_promiscuous(void* buf, wifi_promiscuous_pkt_type_t type) {
       FastLED.show();
     #endif
 
-    Serial.println("eapol");
+    log_d("Got EAPOL ...");
 
-    memcpy(&ssid_known[MAX_SSIDs-1].mac,pkt->payload+16,6);   // MAC source HW address
+    memcpy( &ssid_known[MAX_SSIDs-1].mac, pkt->payload+16, 6 );   // MAC source HW address
 
     for (u = 0; u < ssid_count; u++) {
       if (!memcmp(ssid_known[u].mac, ssid_known[MAX_SSIDs-1].mac, 6))  {
         // only if is new print it
         if (!ssid_known[u].ssid_eapol) {
-          Serial.println("MAC encontrada");
           ssid_eapol_count++;
-          ssid_known[u].ssid_eapol=true;
-          Serial.println(ssid_known[u].ssid_len);
+          ssid_known[u].ssid_eapol = true;
           for(int i = 0; i < ssid_known[u].ssid_len ; i++) {
-            last_eapol_ssid[i]=ssid_known[u].ssid[i];
+            last_eapol_ssid[i] = ssid_known[u].ssid[i];
           }
           last_eapol_ssid[ssid_known[u].ssid_len+1]=0;
-          Serial.println(last_eapol_ssid);
+          Serial.printf("[EAPOL] Found new MAC: %s (SSID: %s)\n",
+            ether_ntoa(ssid_known[u].mac),
+            last_eapol_ssid
+          );
         }
         break;
       }
     }
     //  uint8_t SSID_length = pkt->payload[25];
     //  Serial.println(" SSID: ");
-    //  printDataSpan(26, SSID_length, pkt->payload);
+    //  setLastSSID(26, SSID_length, pkt->payload);
     if (useSD) {
       sdBuffer.addPacket(pkt->payload, packetLength);
     }
@@ -594,13 +627,19 @@ void wifi_promiscuous(void* buf, wifi_promiscuous_pkt_type_t type) {
     uint8_t SSID_length = pkt->payload[37];
     if (SSID_length>32) return;
 
-    bool ascci_error = false;
+    bool ascii_error = false;
     for (u =0; u<SSID_length;u++) {
-      if (!isprint(pkt->payload[38+u])) { Serial.printf("NO IMPRI %02d - %02d", u , SSID_length );Serial.println("");ascci_error = true;  }
-      if (!isAscii(pkt->payload[38+u])) { Serial.printf("NO ASCII %02d - %02d", u , SSID_length );Serial.println("");ascci_error = true;  }
-        }
+      if (!isprint(pkt->payload[38+u])) {
+        log_w("NO IMPRI %02d - %02d", u , SSID_length );
+        ascii_error = true;
+      }
+      if (!isAscii(pkt->payload[38+u])) {
+        log_w("NO ASCII %02d - %02d", u , SSID_length );
+        ascii_error = true;
+      }
+    }
 
-    if (ascci_error) return;
+    if (ascii_error) return;
 
     memcpy(&ssid_known[MAX_SSIDs-1].mac,pkt->payload+16,6);
 
@@ -615,20 +654,20 @@ void wifi_promiscuous(void* buf, wifi_promiscuous_pkt_type_t type) {
     if (!known) {
       // only write the beacon packet the first time that we see it, to reduce writing on the SD-CARD.
       if (useSD) sdBuffer.addPacket(pkt->payload, packetLength);
-      memcpy(&ssid_known[ssid_count].mac,&ssid_known[MAX_SSIDs-1].mac ,6);
-      memcpy(&ssid_known[ssid_count].ssid,pkt->payload+38, SSID_length);
 
-      ssid_known[u].ssid_len=SSID_length;
+      memcpy( &ssid_known[ssid_count].mac,  &ssid_known[MAX_SSIDs-1].mac ,6);
+      memcpy( &ssid_known[ssid_count].ssid, pkt->payload+38, SSID_length);
+      ssid_known[u].ssid_len = SSID_length;
       ssid_count++;
-      Serial.print(" SSID count: ");
-      Serial.println(ssid_count);
-      Serial.print(" pack lengt: ");
-      Serial.println(packetLength);
-      Serial.print(" SSID: ");
-      printDataSpan(38, SSID_length, pkt->payload);
-      Serial.print(" RSSI: ");
+      setLastSSID( 38, SSID_length, pkt->payload );
       last_rssi = pkt->rx_ctrl.rssi;
-      Serial.println(last_rssi);
+
+      Serial.printf("SSID count: %4d | Pack length: %4d  | SSID: %32s | RSSI: %4d\n",
+        ssid_count,
+        packetLength,
+        last_ssid,
+        last_rssi
+      );
     }
   }
 
@@ -649,18 +688,26 @@ void wifi_promiscuous(void* buf, wifi_promiscuous_pkt_type_t type) {
   //Serial.println("");
   //Serial.printf("PACKET TYPE=%s CHAN=%02d, RSSI=%02d ",wifi_sniffer_packet_type2str(type),ctrl.channel,ctrl.rssi);
   //Serial.printf("PACKET TYPE=%s CHAN=%02d, RSSI=%02d ",wifi_sniffer_packet_type2str(type),pkt->rx_ctrl.channel,pkt->rx_ctrl.rssi);
-  char addr[] = "00:00:00:00:00:00";
-  getMAC(addr, pkt->payload, 10);
+
+  // Deprecated :
+  // char addr[] = "00:00:00:00:00:00";
+  // getMAC(addr, pkt->payload, 10);
+
+  // log_d("MAC: %s", ether_ntoa( pkt->payload+10 ) );
+
   //  Serial.print(" Peer MAC: ");
   //  Serial.print(addr);
 
   //  uint8_t SSID_length = pkt->payload[25];
   //  Serial.print(" SSID: ");
-  //  printDataSpan(26, SSID_length, pkt->payload);
+  //  setLastSSID(26, SSID_length, pkt->payload);
 }
 // ===== functions ===================================================
 
 
+char headerStr[64] = {0};
+// header text template
+const char* headerTpl = "%s:%02d|AP:%d|Pkts:%d[%d][%d]%s";
 
 void draw() {
 
@@ -677,28 +724,26 @@ void draw() {
   total_deauths += deauths;
   graph_deauths += deauths;
 
-  String p;
+  char modeStr[2] = {0,0};
 
-  if (autoChMode == 0) { p = "C:"+(String)ch + "|AP:" + (String)ssid_count + "|Pkts " +
-     (String)tmpPacketCounter + "[" + (String)eapol + "]" + "["+ (String)deauths + "]" +
-     (useSD ? "|SD" : "");
-   }
+  switch( autoChMode ) {
+    case 0: modeStr[0] = 'C'; break;
+    case 1: modeStr[0] = 'A'; break;
+    case 2: modeStr[0] = 'S'; break;
+  }
 
-  if (autoChMode == 1) { p = "A:"+(String)ch + "|AP:" + (String)ssid_count + "|Pkts " +
-     (String)tmpPacketCounter + "[" + (String)eapol + "]" + "["+ (String)deauths + "]" +
-     (useSD ? "|SD" : "");
-   }
+  sprintf( headerStr, headerTpl,
+    modeStr,
+    ch,
+    ssid_count,
+    tmpPacketCounter,
+    eapol,
+    deauths,
+    useSD ? "|SD" : ""
+  );
 
-if (autoChMode == 2) { p = "S:"+(String)ch + "|AP:" + (String)ssid_count + "|Pkts " +
-     (String)tmpPacketCounter + "[" + (String)eapol + "]" + "["+ (String)deauths + "]" +
-     (useSD ? "|SD" : "");
-   }
-
-  header.setTextColor( TFT_BLACK, TFT_BLUE ); // unintuitive: use black/blue mask
-  header.setBitmapColor( TFT_BLUE, TFT_WHITE ); // mask will be converted to this color
   header.fillSprite( TFT_BLUE );
-  header.setTextDatum(TL_DATUM);
-  header.drawString(p + "   ", 4, 2);                 // string DRAW
+  header.drawString(headerStr, 4, 2); // string DRAW
   header.pushSprite( 0, 0 );
 
   uint16_t toppos = MAX_Y-100;
@@ -715,11 +760,7 @@ if (autoChMode == 2) { p = "S:"+(String)ch + "|AP:" + (String)ssid_count + "|Pkt
 
   double valstep = maxval / 5;
 
-  units1.setFreeFont(FM9);
   int s = 10, a = 0;
-  units1.setTextColor( TFT_WHITE, TFT_BLACK );
-  units1.setBitmapColor( TFT_WHITE, TFT_BLACK);  // Pkts Scale
-  units1.setTextDatum(MR_DATUM);
   units1.fillSprite( TFT_BLACK );
 
   for ( int ypos = MAX_Y, idx = 0; ypos > 70; ypos = ypos - s ){
@@ -730,8 +771,6 @@ if (autoChMode == 2) { p = "S:"+(String)ch + "|AP:" + (String)ssid_count + "|Pkt
   }
   units1.pushSprite( 0, 20 );
 
-
-  //graph2.setBitmapColor( TFT_GREEN, TFT_BLACK );
   graph2.drawLine(0, 0, MAX_X, 0, 1);// MAX LINE DRAW
 
   for (int i = 40; i < MAX_X; i++) {                  // LINE DRAW
@@ -795,22 +834,22 @@ if (autoChMode == 2) { p = "S:"+(String)ch + "|AP:" + (String)ssid_count + "|Pkt
 void draw_RSSI() {
 
   units2.fillSprite( TFT_BLACK );
+
   units2.setTextColor( TFT_YELLOW, TFT_BLACK );
-  units2.setTextDatum( TR_DATUM );
-  //units2.drawString( "   ", 90+128+50+2+32, 0);
-  units2.drawNumber( graph_RSSI, 44, 0, 2);
-  units2.setTextColor( TFT_GREEN, TFT_BLACK );
-  units2.drawNumber( total_eapol, 44, 16,2);
-  units2.setTextColor( TFT_RED, TFT_BLACK );
-  units2.drawNumber( total_deauths, 44, 32, 2);
-  units2.setTextColor( TFT_WHITE, TFT_BLACK );
-  units2.drawNumber( ssid_eapol_count, 44, 48, 2);
+  units2.drawNumber( graph_RSSI,       44, 0, 2 );
+
+  units2.setTextColor( TFT_GREEN,  TFT_BLACK );
+  units2.drawNumber( total_eapol,      44, 16,2 );
+
+  units2.setTextColor( TFT_RED,    TFT_BLACK );
+  units2.drawNumber( total_deauths,    44, 32, 2 );
+
+  units2.setTextColor( TFT_WHITE,  TFT_BLACK );
+  units2.drawNumber( ssid_eapol_count, 44, 48, 2 );
+
   units2.pushSprite( 268, 136 );
 
-  footer.setTextColor( TFT_BLACK, TFT_BLUE ); // unintuitive: use black/blue mask
-  footer.setBitmapColor( TFT_BLUE, TFT_WHITE ); // mask will be converted to this color
   footer.fillSprite( TFT_BLUE );
-  footer.setTextDatum( TL_DATUM );
   String p = "New SSID:"+(String)last_ssid +" "+(String)last_rssi ;
   footer.drawString(p, 4 , 3);                 // string DRAW
   p = "New HS: "+(String)last_eapol_ssid;
@@ -818,23 +857,21 @@ void draw_RSSI() {
   footer.pushSprite( 0, 138+32+32 );
 
   // Draw point in graph1 sprite at far right edge (this will scroll left later)
-  if (graph_RSSI != 0)  graph1.drawFastVLine(127+50,-(graph_RSSI/2),2,TFT_YELLOW); // draw 2 pixel point on graph
+  if (graph_RSSI != 0)  graph1.drawFastVLine( 127+50, -(graph_RSSI/2), 2, TFT_YELLOW); // draw 2 pixel point on graph
 
   if (graph_eapol>59) graph_eapol=0;
-  if (graph_eapol != 0)  graph1.drawFastVLine(127+50,60-constrain(graph_eapol,1,60),2,TFT_GREEN); // draw 2 pixel point on graph
+  if (graph_eapol != 0)  graph1.drawFastVLine( 127+50, 60-constrain(graph_eapol,1,60), 2, TFT_GREEN); // draw 2 pixel point on graph
 
   if (graph_deauths>59) graph_deauths=0;
-  if (graph_deauths != 0)  graph1.drawFastVLine(127+50,60-constrain(graph_deauths,1,60),2,TFT_RED); // draw 2 pixel point on graph
+  if (graph_deauths != 0)  graph1.drawFastVLine( 127+50, 60-constrain(graph_deauths,1,60), 2, TFT_RED); // draw 2 pixel point on graph
 
   // write the channel on the scroll window.
   if (ch != old_ch){
     old_ch=ch;
-    graph1.setTextColor(TFT_WHITE,TFT_BLACK);
-    graph1.setFreeFont(FM9);
-    graph1.drawString( "  ", 127+50-25,1);
-    graph1.drawNumber(ch,127+50-17,1,2);
+    graph1.drawString( "  ", 127+50-25, 1 );
+    graph1.drawNumber( ch,   127+50-17, 1, 2 );
   }
-  // Push the sprites onto the TFT at specied coordinates
+  // Push the sprites onto the TFT at specified coordinates
   graph1.pushSprite( 90, 138 );
   // Now scroll the sprites scroll(dt, dy) where:
   // dx is pixels to scroll, left = negative value, right = positive value
@@ -846,9 +883,9 @@ void draw_RSSI() {
   if (grid >= 10) {
     // Draw a vertical line if we have scrolled 10 times (10 pixels)
     grid = 0;
-    graph1.drawFastVLine(127+50, 0, 61, TFT_NAVY); // draw line on graph
+    graph1.drawFastVLine( 127+50, 0, 61, TFT_NAVY ); // draw line on graph
   } else { // Otherwise draw points spaced 10 pixels for the horizontal grid lines
-    for (int p = 0; p <= 60; p += 10) graph1.drawPixel(127+50, p, TFT_NAVY);
+    for (int p = 0; p <= 60; p += 10) graph1.drawPixel( 127+50, p, TFT_NAVY );
   }
   tcount--;
 }
@@ -868,46 +905,36 @@ void coreTask( void * p ) {
     /* bit of spaghetti code, have to clean this up later :D_ */
 
     if (autoChMode==1) {
-
-        if ( currentTime - lastAutoSwitchChTime > AUTO_CHANNEL_INTERVAL ) {
-            autoSwitchChannel(currentTime);
-            needDraw = true;
-         }
+      if ( currentTime - lastAutoSwitchChTime > AUTO_CHANNEL_INTERVAL ) {
+        autoSwitchChannel(currentTime);
+        needDraw = true;
+      }
     }
 
-   if (autoChMode==2) {
-
-        if ( currentTime - lastAutoSwitchChTime > AUTO_CHANNEL_INTERVAL ) {
-            smartSwitchChannel(currentTime);
-            needDraw = true;
-         }
+    if (autoChMode==2) {
+      if ( currentTime - lastAutoSwitchChTime > AUTO_CHANNEL_INTERVAL ) {
+        smartSwitchChannel(currentTime);
+        needDraw = true;
+      }
     }
-
-
 
     if ( currentTime - lastButtonTime > 100 ) {
-
       M5.update();
       // buttons assignment :
       //  - SD Activation => BtnA (A for Activation)
       //  - Brightness => BtnB (B for Brightness)
       //  - Channel => BtnC (C for Channel)
-
       if( M5.BtnA.wasReleased() ) {
-
-          if (bright>1) {
-              Serial.println("Incognito Mode");
-              bright=0;
-              bright_leds=0;
-              M5.Lcd.setBrightness(bright);
-
-            } else {
-              bright=100;
-              bright_leds=100;
-              M5.Lcd.setBrightness(bright);
-              }
-
-
+        if (bright>1) {
+          Serial.println("Incognito Mode");
+          bright=0;
+          bright_leds=0;
+          M5.Lcd.setBrightness(bright);
+        } else {
+          bright=100;
+          bright_leds=100;
+          M5.Lcd.setBrightness(bright);
+        }
       } else if (M5.BtnA.wasReleasefor(700)) {
         if (useSD) {
           useSD = false;
@@ -925,32 +952,27 @@ void coreTask( void * p ) {
       }
 
       if( M5.BtnB.wasReleased() ) {
-              bright+=50;
-              if (bright>251) bright=0;
-              M5.Lcd.setBrightness(bright);
-          } else if (M5.BtnB.wasReleasefor(700)) {
-              bright_leds+=100;
-              if (bright_leds>251) bright_leds=0;
-              Serial.println(bright_leds);
-          }
+        bright+=50;
+        if (bright>251) bright=0;
+        M5.Lcd.setBrightness(bright);
+      } else if (M5.BtnB.wasReleasefor(700)) {
+        bright_leds+=100;
+        if (bright_leds>251) bright_leds=0;
+        Serial.println(bright_leds);
+      }
 
       if( M5.BtnC.wasReleased() ) {
         setChannel(ch + 1);
         needDraw = true;
-          } else if (M5.BtnC.wasReleasefor(700)) {
-              autoChMode++;
-              if (autoChMode>2) autoChMode=0;
-              Serial.println(autoChMode);
-          }
-
-
+      } else if (M5.BtnC.wasReleasefor(700)) {
+        autoChMode++;
+        if (autoChMode>2) autoChMode=0;
+        Serial.println(autoChMode);
+      }
 
       lastButtonTime = currentTime;
       if (needDraw) draw();
     }
-
-
-
 
     // save buffer to SD
     if (useSD) sdBuffer.save(&SD);
