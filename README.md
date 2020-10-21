@@ -17,9 +17,15 @@ When a wifi device connect to an AP with WPA2/PSK instead of sharing the wifi ke
 
 Purple Hash Monster capture all the EAPOL / PMKID packets on the SD Card for further analysis.
 
-Short press on first button will change the WiFi channel, long press will enable the SD Card and all EAPOL / PMKID will be stored on the SD-Card.
+Short press on first button will change enable incognito mode (Display and leds off) long press will enable the SD Card and all EAPOL / PMKID will be stored on the SD-Card.
 
-Short press on the third button will change the backlight brightness, long press will change the brigness of the LED bar.
+Short press on the second button will change the display backlight brighness, long press will change the LED bars brightness.
+
+Short press on the third button will change WiFi Channel, long press will enable **Auto-Channel** or **Smart-Channel** modes. 
+
+**Auto-Channel**  hop between channels 1,6 and after 15 seconds. 
+
+**Smart-Channel**  cover all the channels sequentially, but only hop if there is not new SSID, EAPOL or DEAUTHS after 15 seconds. 
 
 When a deauth packet is detected left LED bar will became red and for every EAPOL / PMKID detected right LED bar will became green, also de Purple Hash Monster behaviour will change depending on the WiFi trafic and packets detected. 
 
@@ -28,7 +34,6 @@ When a deauth packet is detected left LED bar will became red and for every EAPO
 
 Use Arduino IDE to compile it, tested with (ESP32 version 1.0.4) M5stack-fire.
 
- **Important: PSRAM must be disabled**.
 
 
 # How guess the WiFi password using brute force attack
