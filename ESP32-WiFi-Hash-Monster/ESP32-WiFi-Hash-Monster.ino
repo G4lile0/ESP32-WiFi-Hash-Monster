@@ -23,11 +23,19 @@
 // Button : click to change channel hold to dis/enable SD
 // SD : GPIO4=CS(CD/D3), 23=MOSI(CMD), 18=CLK, 19=MISO(D0)
 //--------------------------------------------------------------------
-//#include <M5Core2.h>        // https://github.com/m5stack/M5Core2/
-//#include <M5Stack.h>        // https://github.com/m5stack/M5Stack/    (use version => 0.3.0 to properly display the Monster)
-#include <ESP32-Chimera-Core.h>        // https://github.com/tobozo/ESP32-Chimera-Core/
+#ifdef ARDUINO_M5STACK_Core2
+  #include <M5Core2.h>        // https://github.com/m5stack/M5Core2/
+#endif
+#if defined(ARDUINO_M5STACK_FIRE) || defined(ARDUINO_M5Stack_Core_ESP32)
+  #include <M5Stack.h>        // https://github.com/m5stack/M5Stack/    (use version => 0.3.0 to properly display the Monster)
+#endif
+#ifdef ARDUINO_ODROID_ESP32
+  #include <ESP32-Chimera-Core.h>        // https://github.com/tobozo/ESP32-Chimera-Core/
+#endif
 
+#ifdef USE_M5STACK_UPDATER
 #include <M5StackUpdater.h> // https://github.com/tobozo/M5Stack-SD-Updater/
+#endif
 #include "Free_Fonts.h"
 #include <SPI.h>
 #include "freertos/FreeRTOS.h"
@@ -177,8 +185,10 @@ void setup() {
     FastLED.show();
   #endif
   M5.begin(); // this will fire Serial.begin()
+  #ifdef USE_M5STACK_UPDATER
   // New SD Updater support, requires the latest version of https://github.com/tobozo/M5Stack-SD-Updater/
   checkSDUpdater( /*SD, MENU_BIN, 1500*/ ); // Filesystem, Launcher bin path, Wait delay
+  #endif
   // SD card ---------------------------------------------------------
   bool toggle = false;
   unsigned long lastcheck = millis();
@@ -194,7 +204,7 @@ void setup() {
       #ifdef ARDUINO_M5STACK_Core2
         M5.Axp.SetLcdVoltage(2500);
         M5.Axp.DeepSleep();
-      #else
+      #elif defined(ARDUINO_M5STACK_FIRE) || defined(ARDUINO_M5Stack_Core_ESP32)
         M5.setWakeupButton( BUTTON_B_PIN );
         M5.powerOFF();
       #endif
