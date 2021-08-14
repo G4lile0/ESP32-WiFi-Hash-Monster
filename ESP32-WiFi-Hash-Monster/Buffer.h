@@ -28,6 +28,8 @@ class Buffer {
     void write(uint16_t n);
     void write(uint8_t* buf, uint32_t len);
 
+    uint64_t micros64();
+
     uint8_t* bufA;
     uint8_t* bufB;
 
@@ -42,6 +44,9 @@ class Buffer {
     const char *folderName = "/pcap"; // no trailing slash
     const char *fileNameTpl = "%s/%04X.pcap"; // hex is better for natural sorting, assume max 65536 files
     File file;
+
+    uint32_t previous_micros = 0;
+    uint32_t micros_high = 0;
 };
 
 #endif
