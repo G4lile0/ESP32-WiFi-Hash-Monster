@@ -59,6 +59,14 @@ void Buffer::close(fs::FS* fs){
   Serial.println("file closed");
 }
 
+uint64_t Buffer::micros64() {
+  uint32_t micros_low = micros();
+  if(micros_low < previous_micros)
+      ++micros_high;
+  previous_micros = micros_low;
+  return (uint64_t(micros_high) << 32) + micros_low;
+}
+
 void Buffer::addPacket(uint8_t* buf, uint32_t len){
 
   // buffer is full -> drop packet
@@ -76,10 +84,9 @@ void Buffer::addPacket(uint8_t* buf, uint32_t len){
     Serial.println("\nswitched to buffer A");
   }
 
-  uint32_t microSeconds = micros(); // e.g. 45200400 => 45s 200ms 400us
-  uint32_t seconds = (microSeconds/1000)/1000; // e.g. 45200400/1000/1000 = 45200 / 1000 = 45s
-
-  microSeconds -= seconds*1000*1000; // e.g. 45200400 - 45*1000*1000 = 45200400 - 45000000 = 400us (because we only need the offset)
+  uint64_t microSeconds64 = micros64(); // e.g. 45200400 => 45s 200ms 400us
+  uint32_t seconds      = microSeconds64 / 1000000; // e.g. 45200400/1000/1000 = 45200 / 1000 = 45s
+  uint32_t microSeconds = microSeconds64 % 1000000; // remainder
 
   write(seconds); // ts_sec
   write(microSeconds); // ts_usec
