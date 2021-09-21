@@ -1,18 +1,25 @@
 #include "Buffer.h"
 
 Buffer::Buffer() {
-  bufA = (uint8_t*)malloc(BUF_SIZE);
-  if( bufA == NULL ) {
-    log_e("Panic! Can't malloc %d bytes for buffer 1", BUF_SIZE );
-    while(1) vTaskDelay(1);
-  }
-  bufB = (uint8_t*)malloc(BUF_SIZE);
-  if( bufB == NULL ) {
-    log_e("Panic! Can't malloc %d bytes for buffer 2", BUF_SIZE );
-    while(1) vTaskDelay(1);
-  }
 
 }
+
+
+bool Buffer::init() {
+  bufA = (uint8_t*)EWH_MALLOC(BUF_SIZE);
+  if( bufA == NULL ) {
+    log_e("Panic! Can't malloc %d bytes for buffer 1", BUF_SIZE );
+    return false;
+  }
+  bufB = (uint8_t*)EWH_MALLOC(BUF_SIZE);
+  if( bufB == NULL ) {
+    log_e("Panic! Can't malloc %d bytes for buffer 2", BUF_SIZE );
+    return false;
+  }
+  return true;
+}
+
+
 
 void Buffer::checkFS(fs::FS* fs) {
   if( !fs->exists( folderName ) ) {

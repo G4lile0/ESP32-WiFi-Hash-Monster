@@ -7,8 +7,14 @@
 
 #if defined ARDUINO_M5Stack_Core_ESP32
   #define BUF_BLOCKS 4
+  #define EWH_MALLOC malloc
 #else
   #define BUF_BLOCKS 24
+  #if defined BOARD_HAS_PSRAM
+    #define EWH_MALLOC ps_malloc
+  #else
+    #define EWH_MALLOC malloc
+  #endif
 #endif
 
 #define BUF_SIZE BUF_BLOCKS * 1024
@@ -19,6 +25,7 @@ extern bool useSD;
 class Buffer {
   public:
     Buffer();
+    bool init();
     void checkFS(fs::FS* fs);
     bool open(fs::FS* fs);
     void close(fs::FS* fs);
