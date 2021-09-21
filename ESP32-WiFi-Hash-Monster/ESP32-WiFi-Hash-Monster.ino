@@ -23,18 +23,16 @@
 // Button : click to change channel hold to dis/enable SD
 // SD : GPIO4=CS(CD/D3), 23=MOSI(CMD), 18=CLK, 19=MISO(D0)
 //--------------------------------------------------------------------
-#ifdef ARDUINO_M5STACK_Core2
+#if defined (ARDUINO_M5STACK_Core2)
   #include <M5Core2.h>        // https://github.com/m5stack/M5Core2/
-#endif
-#if defined(ARDUINO_M5STACK_FIRE) || defined(ARDUINO_M5Stack_Core_ESP32)
-  #include <M5Stack.h>        // https://github.com/m5stack/M5Stack/    (use version => 0.3.0 to properly display the Monster)
-#endif
-#ifdef ARDUINO_ODROID_ESP32
+//#elif defined(ARDUINO_M5STACK_FIRE) || defined(ARDUINO_M5Stack_Core_ESP32)
+//  #include <M5Stack.h>        // https://github.com/m5stack/M5Stack/    (use version => 0.3.0 to properly display the Monster)
+#elif defined (ARDUINO_ODROID_ESP32) || defined(ARDUINO_M5STACK_FIRE) || defined(ARDUINO_M5Stack_Core_ESP32)
   #include <ESP32-Chimera-Core.h>        // https://github.com/tobozo/ESP32-Chimera-Core/
 #endif
 
 #ifdef USE_M5STACK_UPDATER
-#include <M5StackUpdater.h> // https://github.com/tobozo/M5Stack-SD-Updater/
+  #include <M5StackUpdater.h> // https://github.com/tobozo/M5Stack-SD-Updater/
 #endif
 #include "Free_Fonts.h"
 #include <SPI.h>
@@ -81,6 +79,7 @@ esp_err_t event_handler(void* ctx,system_event_t* event){return ESP_OK;}
 Buffer sdBuffer;
 Preferences preferences;
 bool useSD = USE_SD_BY_DEFAULT;
+static bool SDSetupDone = false;
 
 uint32_t lastDrawTime = 0;
 uint32_t lastButtonTime = millis();
@@ -187,7 +186,7 @@ void setup() {
   M5.begin(); // this will fire Serial.begin()
   #ifdef USE_M5STACK_UPDATER
   // New SD Updater support, requires the latest version of https://github.com/tobozo/M5Stack-SD-Updater/
-  checkSDUpdater( /*SD, MENU_BIN, 1500*/ ); // Filesystem, Launcher bin path, Wait delay
+  checkSDUpdater( SD, MENU_BIN, 1500, TFCARD_CS_PIN ); // Filesystem, Launcher bin path, Wait delay
   #endif
   // SD card ---------------------------------------------------------
   bool toggle = false;
@@ -210,6 +209,8 @@ void setup() {
       #endif
     }
   }
+
+  SDSetupDone = true;
 
   // Settings
   preferences.begin("packetmonitor32", false);
@@ -435,7 +436,7 @@ void smartSwitchChannel(uint32_t currentTime) {
 
 // ===== functions ===================================================
 
-static bool SDSetupDone = false;
+
 
 bool setupSD() {
   if( SDSetupDone ) return true;
