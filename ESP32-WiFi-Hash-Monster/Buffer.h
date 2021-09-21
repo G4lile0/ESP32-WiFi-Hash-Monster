@@ -5,7 +5,13 @@
 #include "FS.h"
 //#include "SD_MMC.h"
 
-#define BUF_SIZE 24 * 1024
+#if defined ARDUINO_M5Stack_Core_ESP32
+  #define BUF_BLOCKS 4
+#else
+  #define BUF_BLOCKS 24
+#endif
+
+#define BUF_SIZE BUF_BLOCKS * 1024
 #define SNAP_LEN 2324 // max len of each recieved packet
 
 extern bool useSD;
