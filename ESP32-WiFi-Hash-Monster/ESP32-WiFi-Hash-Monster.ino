@@ -23,18 +23,16 @@
 // Button : click to change channel hold to dis/enable SD
 // SD : GPIO4=CS(CD/D3), 23=MOSI(CMD), 18=CLK, 19=MISO(D0)
 //--------------------------------------------------------------------
-#ifdef ARDUINO_M5STACK_Core2
-  #include <M5Core2.h>        // https://github.com/m5stack/M5Core2/
-#endif
-#if defined(ARDUINO_M5STACK_FIRE) || defined(ARDUINO_M5Stack_Core_ESP32)
-  #include <M5Stack.h>        // https://github.com/m5stack/M5Stack/    (use version => 0.3.0 to properly display the Monster)
-#endif
-#ifdef ARDUINO_ODROID_ESP32
-  #include <ESP32-Chimera-Core.h>        // https://github.com/tobozo/ESP32-Chimera-Core/
+
+#include <ESP32-Chimera-Core.h>        // https://github.com/tobozo/ESP32-Chimera-Core/
+#if !defined USE_M5STACK_UPDATER
+  // comment this out to disable SD-Updater
+  #define USE_M5STACK_UPDATER
 #endif
 
 #ifdef USE_M5STACK_UPDATER
-#include <M5StackUpdater.h> // https://github.com/tobozo/M5Stack-SD-Updater/
+  #define SDU_APP_NAME "WiFi Hash Monster" // title for SD-Updater UI
+  #include <M5StackUpdater.h> // https://github.com/tobozo/M5Stack-SD-Updater/
 #endif
 #include "Free_Fonts.h"
 #include <SPI.h>
@@ -81,6 +79,7 @@ esp_err_t event_handler(void* ctx,system_event_t* event){return ESP_OK;}
 Buffer sdBuffer;
 Preferences preferences;
 bool useSD = USE_SD_BY_DEFAULT;
+static bool SDSetupDone = false;
 
 uint32_t lastDrawTime = 0;
 uint32_t lastButtonTime = millis();
@@ -187,7 +186,7 @@ void setup() {
   M5.begin(); // this will fire Serial.begin()
   #ifdef USE_M5STACK_UPDATER
   // New SD Updater support, requires the latest version of https://github.com/tobozo/M5Stack-SD-Updater/
-  checkSDUpdater( /*SD, MENU_BIN, 1500*/ ); // Filesystem, Launcher bin path, Wait delay
+  checkSDUpdater( SD, MENU_BIN, 1500, TFCARD_CS_PIN ); // Filesystem, Launcher bin path, Wait delay
   #endif
   // SD card ---------------------------------------------------------
   bool toggle = false;
@@ -210,6 +209,8 @@ void setup() {
       #endif
     }
   }
+
+  SDSetupDone = true;
 
   // Settings
   preferences.begin("packetmonitor32", false);
@@ -268,7 +269,12 @@ void setup() {
 
   if (useSD) Serial.println("pues esta encendido");
 
-  sdBuffer = Buffer();
+  //sdBuffer = Buffer();
+  if( !sdBuffer.init() ) {
+    // TODO: print error on display
+    Serial.println("Error, not enough memory for buffer");
+    while(1) vTaskDelay(1);
+  }
 
   if (setupSD()){
     sdBuffer.checkFS(&SD);
@@ -291,7 +297,9 @@ void setup() {
 
   // Create a sprite for the header
   header.setColorDepth(1);
-  header.createSprite(320, 20);
+  if(!header.createSprite(320, 20) ) {
+    log_e("Can't create header sprite");
+  }
   header.setFreeFont(FM9);
   header.setTextColor( TFT_BLACK, TFT_BLUE ); // unintuitive: use black/blue mask
   header.setTextDatum(TL_DATUM);
@@ -300,7 +308,9 @@ void setup() {
 
   // Create a sprite for the footer
   footer.setColorDepth(1);
-  footer.createSprite(320, 40);
+  if(!footer.createSprite(320, 40) ) {
+    log_e("Can't create footer sprite");
+  }
   footer.setFreeFont(FM9);
   footer.setTextColor( TFT_BLACK, TFT_BLUE ); // unintuitive: use black/blue mask
   footer.setTextDatum(TL_DATUM);
@@ -309,20 +319,26 @@ void setup() {
 
   // Create a sprite for the graph1
   graph1.setColorDepth(8);
-  graph1.createSprite(128+50, 61); // graph1.pushSprite( 90, 138 );
+  if(!graph1.createSprite(128+50, 61) ) {
+    log_e("Can't create graph1 sprite");
+  }
   graph1.setTextColor(TFT_WHITE,TFT_BLACK);
   graph1.setFreeFont(FM9);
   graph1.fillSprite(TFT_BLACK);
 
   // Create a sprite for the graph2
   graph2.setColorDepth(1);
-  graph2.createSprite(MAX_X-40, 100);
+  if(!graph2.createSprite(MAX_X-40, 100) ) {
+    log_e("Can't create graph2 sprite");
+  }
   graph2.setBitmapColor( TFT_GREEN, TFT_BLACK );
   graph2.fillSprite(TFT_BLACK);
 
   // create a sprite for units1
   units1.setColorDepth(1);
-  units1.createSprite(40, 120);
+  if(!units1.createSprite(40, 120) ) {
+    log_e("Can't create units1 sprite");
+  }
   units1.setFreeFont(FM9);
   units1.setTextColor( TFT_WHITE, TFT_BLACK );
   units1.setBitmapColor( TFT_WHITE, TFT_BLACK);  // Pkts Scale
@@ -331,13 +347,17 @@ void setup() {
 
   // create a sprite for units2
   units2.setColorDepth(8);
-  units2.createSprite(52, 64);
+  if(!units2.createSprite(52, 64) ) {
+    log_e("Can't create units2 sprite");
+  }
   units2.setTextDatum( TR_DATUM );
   units2.fillSprite(TFT_BLACK);
 
   // Create a sprite for the monster
   face1.setColorDepth(16);
-  face1.createSprite(64, 64);
+  if(!face1.createSprite(64, 64) ) {
+    log_e("Can't create face sprite");
+  }
   face1.fillSprite(TFT_BLACK); // Note: Sprite is filled with black when created
   #ifdef _CHIMERA_CORE_
     face1.setSwapBytes(true);
@@ -357,7 +377,7 @@ void setup() {
     "coreTask",             /* Name of the task */
     8192,                   /* Stack size in words */
     NULL,                   /* Task input parameter */
-    0,                      /* Priority of the task */
+    16,                      /* Priority of the task */
     NULL,                   /* Task handle. */
     RUNNING_CORE);          /* Core where the task should run */
   // start Wifi sniffer ---------------------------------------------
@@ -435,7 +455,7 @@ void smartSwitchChannel(uint32_t currentTime) {
 
 // ===== functions ===================================================
 
-static bool SDSetupDone = false;
+
 
 bool setupSD() {
   if( SDSetupDone ) return true;
@@ -838,7 +858,7 @@ void draw() {
     face1.pushImage(0, 0, 64, 64, love_64);
   }
 
-  face1.pushSprite(10, 140);
+  face1.pushSprite(10, 140, TFT_BLACK);
 
   draw_RSSI();
 

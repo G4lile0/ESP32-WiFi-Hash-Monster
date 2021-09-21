@@ -1,9 +1,25 @@
 #include "Buffer.h"
 
-Buffer::Buffer(){
-  bufA = (uint8_t*)malloc(BUF_SIZE);
-  bufB = (uint8_t*)malloc(BUF_SIZE);
+Buffer::Buffer() {
+
 }
+
+
+bool Buffer::init() {
+  bufA = (uint8_t*)EWH_MALLOC(BUF_SIZE);
+  if( bufA == NULL ) {
+    log_e("Panic! Can't malloc %d bytes for buffer 1", BUF_SIZE );
+    return false;
+  }
+  bufB = (uint8_t*)EWH_MALLOC(BUF_SIZE);
+  if( bufB == NULL ) {
+    log_e("Panic! Can't malloc %d bytes for buffer 2", BUF_SIZE );
+    return false;
+  }
+  return true;
+}
+
+
 
 void Buffer::checkFS(fs::FS* fs) {
   if( !fs->exists( folderName ) ) {
@@ -25,13 +41,14 @@ bool Buffer::open(fs::FS* fs){
     }
   } while(fs->exists( fileNameStr ));
 
-  Serial.println( fileNameStr );
+  Serial.printf( "Will create new file: %s\n", fileNameStr );
 
   file = fs->open( fileNameStr, FILE_WRITE);
   file.close();
 
   if( !fs->exists( fileNameStr ) ) {
     // SD Card full or not inserted
+    log_e("SD Card full or not inserted");
     return false;
   }
 
@@ -56,7 +73,7 @@ void Buffer::close(fs::FS* fs){
   if(!writing) return;
   forceSave(fs);
   writing = false;
-  Serial.println("file closed");
+  Serial.printf( "File: %s closed\n", fileNameStr );
 }
 
 uint64_t Buffer::micros64() {
@@ -147,7 +164,7 @@ void Buffer::save(fs::FS* fs){
   uint32_t startTime = millis();
   uint32_t finishTime;
 
-  file = fs->open( fileNameStr, FILE_APPEND);
+  file = fs->open( fileNameStr, FILE_APPEND );
   if (!file) {
     Serial.printf("Failed to open file %s\n", fileNameStr );
     useSD = false;

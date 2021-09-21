@@ -5,7 +5,19 @@
 #include "FS.h"
 //#include "SD_MMC.h"
 
-#define BUF_SIZE 24 * 1024
+#if defined ARDUINO_M5Stack_Core_ESP32
+  #define BUF_BLOCKS 4
+  #define EWH_MALLOC malloc
+#else
+  #define BUF_BLOCKS 24
+  #if defined BOARD_HAS_PSRAM
+    #define EWH_MALLOC ps_malloc
+  #else
+    #define EWH_MALLOC malloc
+  #endif
+#endif
+
+#define BUF_SIZE BUF_BLOCKS * 1024
 #define SNAP_LEN 2324 // max len of each recieved packet
 
 extern bool useSD;
@@ -13,6 +25,7 @@ extern bool useSD;
 class Buffer {
   public:
     Buffer();
+    bool init();
     void checkFS(fs::FS* fs);
     bool open(fs::FS* fs);
     void close(fs::FS* fs);
