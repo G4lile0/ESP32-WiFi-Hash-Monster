@@ -25,13 +25,21 @@
 //--------------------------------------------------------------------
 
 #include <ESP32-Chimera-Core.h>        // https://github.com/tobozo/ESP32-Chimera-Core/
+#define tft M5.Lcd
 #if !defined USE_M5STACK_UPDATER
   // comment this out to disable SD-Updater
   #define USE_M5STACK_UPDATER
+  #ifdef ARDUINO_M5STACK_Core2
+    #define M5STACK_UPDATER_MENUDELAY 15000 // how long the "load menu" is displayed at boot
+  #else
+    #define M5STACK_UPDATER_MENUDELAY 0 // M5Stack Classic/Fire don't need to see the menu
+  #endif
 #endif
 
 #ifdef USE_M5STACK_UPDATER
   #define SDU_APP_NAME "WiFi Hash Monster" // title for SD-Updater UI
+  //#define LAUNCHER_LABEL "<< Menu"
+  //#define SKIP_LABEL     "Launch"
   #include <M5StackUpdater.h> // https://github.com/tobozo/M5Stack-SD-Updater/
 #endif
 #include "Free_Fonts.h"
@@ -109,13 +117,13 @@ unsigned int ledPacketCounter = 0;
 
 int rssiSum;
 
-TFT_eSprite graph1 = TFT_eSprite(&M5.Lcd); // Sprite object graph1
-TFT_eSprite graph2 = TFT_eSprite(&M5.Lcd); // Sprite object graph2
-TFT_eSprite units1 = TFT_eSprite(&M5.Lcd); // Sprite object units1
-TFT_eSprite units2 = TFT_eSprite(&M5.Lcd); // Sprite object units2
-TFT_eSprite face1  = TFT_eSprite(&M5.Lcd); // Sprite object face
-TFT_eSprite header = TFT_eSprite(&M5.Lcd); // Sprite object header
-TFT_eSprite footer = TFT_eSprite(&M5.Lcd); // Sprite object footer
+TFT_eSprite graph1 = TFT_eSprite(&tft); // Sprite object graph1
+TFT_eSprite graph2 = TFT_eSprite(&tft); // Sprite object graph2
+TFT_eSprite units1 = TFT_eSprite(&tft); // Sprite object units1
+TFT_eSprite units2 = TFT_eSprite(&tft); // Sprite object units2
+TFT_eSprite face1  = TFT_eSprite(&tft); // Sprite object face
+TFT_eSprite header = TFT_eSprite(&tft); // Sprite object header
+TFT_eSprite footer = TFT_eSprite(&tft); // Sprite object footer
 
 int graph_RSSI = 1;
 int delta = 1;
@@ -185,17 +193,24 @@ void setup() {
   #endif
   M5.begin(); // this will fire Serial.begin()
   #ifdef USE_M5STACK_UPDATER
-  // New SD Updater support, requires the latest version of https://github.com/tobozo/M5Stack-SD-Updater/
-  checkSDUpdater( SD, MENU_BIN, 1500, TFCARD_CS_PIN ); // Filesystem, Launcher bin path, Wait delay
+    // New SD Updater support, requires the latest version of https://github.com/tobozo/M5Stack-SD-Updater/
+    #if defined M5_SD_UPDATER_VERSION_INT
+      SDUCfg.setLabelMenu("<< Menu");
+      SDUCfg.setLabelSkip("Launch");
+    #endif
+    checkSDUpdater( SD, MENU_BIN, M5STACK_UPDATER_MENUDELAY, TFCARD_CS_PIN ); // Filesystem, Launcher bin path, Wait delay
   #endif
   // SD card ---------------------------------------------------------
   bool toggle = false;
   unsigned long lastcheck = millis();
-  M5.Lcd.fillScreen(TFT_BLACK);
-  while( !SD.begin( TFCARD_CS_PIN ) ) {
+  tft.fillScreen(TFT_BLACK);
+  while( !M5.sd_begin() ) {
     toggle = !toggle;
-    M5.Lcd.setTextColor( toggle ? TFT_BLACK : TFT_WHITE );
-    M5.Lcd.drawString( "INSERT SD", 160, 84, 2 );
+    tft.setTextColor( toggle ? TFT_BLACK : TFT_WHITE );
+    tft.setTextDatum( MC_DATUM );
+    tft.setTextSize( 2 );
+    tft.drawString( "INSERT SD", tft.width()/2, tft.height()/2);
+    tft.setTextDatum( TL_DATUM );
     delay( toggle ? 300 : 500 );
     // go to sleep after a minute, no need to hammer the SD Card reader
     if( lastcheck + 60000 < millis() ) {
@@ -254,17 +269,17 @@ void setup() {
     M5.Speaker.write(0); // Speaker OFF
   #endif
 
-  M5.Lcd.clear();
-  M5.Lcd.setTextColor(TFT_WHITE, TFT_BLACK);
-  M5.Lcd.setTextSize(0);
+  tft.clear();
+  tft.setTextColor(TFT_WHITE, TFT_BLACK);
+  tft.setTextSize(0);
   /* show start screen */
-  M5.Lcd.setFreeFont(FM12);
-  M5.Lcd.drawString( "Purple Hash Monster", 6, 24);
-  M5.Lcd.drawString( "by @g4lile0", 29, 44);
-  M5.Lcd.drawString( "90% PacketMonitor32", 6, 74);
-  M5.Lcd.drawString( "by @Spacehuhn", 29, 94);
-  M5.Lcd.setSwapBytes(true);
-  M5.Lcd.pushImage(200, 158, 64, 64, (uint16_t*)love_64);
+  tft.setFont(FM12);
+  tft.drawString( "Purple Hash Monster", 6, 24);
+  tft.drawString( "by @g4lile0", 29, 44);
+  tft.drawString( "90% PacketMonitor32", 6, 74);
+  tft.drawString( "by @Spacehuhn", 29, 94);
+  tft.setSwapBytes(true);
+  tft.pushImage(200, 158, 64, 64, (uint16_t*)love_64);
   delay( 3000 );
 
   if (useSD) Serial.println("pues esta encendido");
@@ -300,7 +315,7 @@ void setup() {
   if(!header.createSprite(320, 20) ) {
     log_e("Can't create header sprite");
   }
-  header.setFreeFont(FM9);
+  header.setFont(FM9);
   header.setTextColor( TFT_BLACK, TFT_BLUE ); // unintuitive: use black/blue mask
   header.setTextDatum(TL_DATUM);
   header.setBitmapColor( TFT_BLUE, TFT_WHITE ); // mask will be converted to this color
@@ -311,7 +326,7 @@ void setup() {
   if(!footer.createSprite(320, 40) ) {
     log_e("Can't create footer sprite");
   }
-  footer.setFreeFont(FM9);
+  footer.setFont(FM9);
   footer.setTextColor( TFT_BLACK, TFT_BLUE ); // unintuitive: use black/blue mask
   footer.setTextDatum(TL_DATUM);
   footer.setBitmapColor( TFT_BLUE, TFT_WHITE ); // mask will be converted to this color
@@ -323,7 +338,7 @@ void setup() {
     log_e("Can't create graph1 sprite");
   }
   graph1.setTextColor(TFT_WHITE,TFT_BLACK);
-  graph1.setFreeFont(FM9);
+  graph1.setFont( &fonts::Font2 );
   graph1.fillSprite(TFT_BLACK);
 
   // Create a sprite for the graph2
@@ -339,7 +354,7 @@ void setup() {
   if(!units1.createSprite(40, 120) ) {
     log_e("Can't create units1 sprite");
   }
-  units1.setFreeFont(FM9);
+  units1.setFont(FM9);
   units1.setTextColor( TFT_WHITE, TFT_BLACK );
   units1.setBitmapColor( TFT_WHITE, TFT_BLACK);  // Pkts Scale
   units1.setTextDatum(MR_DATUM);
@@ -351,6 +366,7 @@ void setup() {
     log_e("Can't create units2 sprite");
   }
   units2.setTextDatum( TR_DATUM );
+  units2.setFont( &fonts::Font2 );
   units2.fillSprite(TFT_BLACK);
 
   // Create a sprite for the monster
@@ -364,7 +380,7 @@ void setup() {
   #else
     face1.setSwapBytes(false);
   #endif
-  M5.Lcd.clear();
+  tft.clear();
   lastButtonTime = millis();
   M5.update();
 
@@ -664,11 +680,11 @@ void wifi_promiscuous(void* buf, wifi_promiscuous_pkt_type_t type) {
     bool ascii_error = false;
     for (u =0; u<SSID_length;u++) {
       if (!isprint(pkt->payload[38+u])) {
-        log_w("NO IMPRI %02d - %02d", u , SSID_length );
+        log_d("NO IMPRI %02d - %02d", u , SSID_length );
         ascii_error = true;
       }
       if (!isAscii(pkt->payload[38+u])) {
-        log_w("NO ASCII %02d - %02d", u , SSID_length );
+        log_d("NO ASCII %02d - %02d", u , SSID_length );
         ascii_error = true;
       }
     }
@@ -870,16 +886,16 @@ void draw_RSSI() {
   units2.fillSprite( TFT_BLACK );
 
   units2.setTextColor( TFT_YELLOW, TFT_BLACK );
-  units2.drawNumber( graph_RSSI,       44, 0, 2 );
+  units2.drawNumber( graph_RSSI,       44, 0 );
 
   units2.setTextColor( TFT_GREEN,  TFT_BLACK );
-  units2.drawNumber( total_eapol,      44, 16,2 );
+  units2.drawNumber( total_eapol,      44, 16 );
 
   units2.setTextColor( TFT_RED,    TFT_BLACK );
-  units2.drawNumber( total_deauths,    44, 32, 2 );
+  units2.drawNumber( total_deauths,    44, 32 );
 
   units2.setTextColor( TFT_WHITE,  TFT_BLACK );
-  units2.drawNumber( ssid_eapol_count, 44, 48, 2 );
+  units2.drawNumber( ssid_eapol_count, 44, 48 );
 
   units2.pushSprite( 268, 136 );
 
@@ -903,7 +919,7 @@ void draw_RSSI() {
   if (ch != old_ch){
     old_ch=ch;
     graph1.drawString( "  ", 127+50-25, 1 );
-    graph1.drawNumber( ch,   127+50-17, 1, 2 );
+    graph1.drawNumber( ch,   127+50-17, 1 );
   }
   // Push the sprites onto the TFT at specified coordinates
   graph1.pushSprite( 90, 138 );
@@ -962,11 +978,11 @@ void coreTask( void * p ) {
           Serial.println("Incognito Mode");
           bright=0;
           bright_leds=0;
-          M5.Lcd.setBrightness(bright);
+          tft.setBrightness(bright);
         } else {
           bright=100;
           bright_leds=100;
-          M5.Lcd.setBrightness(bright);
+          tft.setBrightness(bright);
         }
       } else if (M5.BtnA.wasReleasefor(700)) {
         if (useSD) {
@@ -987,7 +1003,7 @@ void coreTask( void * p ) {
       if( M5.BtnB.wasReleased() ) {
         bright+=50;
         if (bright>251) bright=0;
-        M5.Lcd.setBrightness(bright);
+        tft.setBrightness(bright);
       } else if (M5.BtnB.wasReleasefor(700)) {
         bright_leds+=100;
         if (bright_leds>251) bright_leds=0;
@@ -1036,7 +1052,7 @@ void coreTask( void * p ) {
     }
   }
   draw_RSSI();
-  //  M5.Lcd.pushImage(200, 200, 64, 64, happy_64);
+  //  tft.pushImage(200, 200, 64, 64, happy_64);
 }
 
 
