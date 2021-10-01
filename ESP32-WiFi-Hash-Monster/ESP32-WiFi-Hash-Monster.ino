@@ -29,14 +29,14 @@
 #if !defined USE_M5STACK_UPDATER
   // comment this out to disable SD-Updater
   #define USE_M5STACK_UPDATER
+#endif
+
+#ifdef USE_M5STACK_UPDATER
   #ifdef ARDUINO_M5STACK_Core2
     #define M5STACK_UPDATER_MENUDELAY 5000 // how long (millis) the SDUpdater lobby is visible at boot
   #else
     #define M5STACK_UPDATER_MENUDELAY 0 // M5Stack Classic/Fire don't need to see the menu
   #endif
-#endif
-
-#ifdef USE_M5STACK_UPDATER
   #define SDU_APP_NAME "WiFi Hash Monster" // title for SD-Updater UI
   #include <M5StackUpdater.h> // https://github.com/tobozo/M5Stack-SD-Updater/
 #endif
