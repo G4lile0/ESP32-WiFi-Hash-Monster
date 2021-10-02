@@ -33,7 +33,7 @@ jobs:
       - name: Compile all examples
         uses: ArminJo/arduino-test-compile@v3
         with:
-          required-libraries: LovyanGFX@0.4.3, ESP32-Chimera-Core@1.2.2, M5Stack-SD-Updater@1.1.3, FastLED@3.4.0
+          required-libraries: LovyanGFX@0.4.3,ESP32-Chimera-Core@1.2.2,M5Stack-SD-Updater@1.1.3,FastLED@3.4.0
           arduino-board-fqbn: ${{ matrix.arduino-boards-fqbn }}
           sketch-names: ESP32-WiFi-Hash-Monster.ino
           platform-url: https://raw.githubusercontent.com/espressif/arduino-esp32/gh-pages/package_esp32_dev_index.json
