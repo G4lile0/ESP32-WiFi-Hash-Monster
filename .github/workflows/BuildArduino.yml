@@ -17,27 +17,10 @@ jobs:
       matrix:
 
         arduino-boards-fqbn:
-          - esp32:esp32:m5stack-fire:FlashFreq=80
-          - esp32:esp32:m5stack-core-esp32:FlashFreq=80
-          - esp32:esp32:m5stack-core2:FlashFreq=80
-          - esp32:esp32:odroid_esp32:FlashFreq=80
-
-        include:
-          - arduino-boards-fqbn: esp32:esp32:m5stack-fire:FlashFreq=80
-            platform-url: https://raw.githubusercontent.com/espressif/arduino-esp32/gh-pages/package_esp32_dev_index.json
-            sketch-names: ESP32-WiFi-Hash-Monster.ino
-
-          - arduino-boards-fqbn: esp32:esp32:m5stack-core-esp32:FlashFreq=80
-            platform-url: https://raw.githubusercontent.com/espressif/arduino-esp32/gh-pages/package_esp32_dev_index.json
-            sketch-names: ESP32-WiFi-Hash-Monster.ino
-
-          - arduino-boards-fqbn: esp32:esp32:m5stack-core2:FlashFreq=80
-            platform-url: https://raw.githubusercontent.com/espressif/arduino-esp32/gh-pages/package_esp32_dev_index.json
-            sketch-names: ESP32-WiFi-Hash-Monster.ino
-
-          - arduino-boards-fqbn: esp32:esp32:odroid_esp32:FlashFreq=80
-            platform-url: https://raw.githubusercontent.com/espressif/arduino-esp32/gh-pages/package_esp32_dev_index.json
-            sketch-names: ESP32-WiFi-Hash-Monster.ino
+          - esp32:esp32:m5stack-fire
+          - esp32:esp32:m5stack-core-esp32
+          - esp32:esp32:m5stack-core2
+          - esp32:esp32:odroid_esp32
 
       fail-fast: false
 
@@ -50,11 +33,13 @@ jobs:
       - name: Compile all examples
         uses: ArminJo/arduino-test-compile@v3
         with:
-          required-libraries: LovyanGFX@0.4.3, ESP32-Chimera-Core@1.2.2, M5Stack-SD-Updater@1.1.3, FastLED@3.4.0
+          required-libraries: LovyanGFX@0.4.3,ESP32-Chimera-Core@1.2.2,M5Stack-SD-Updater@1.1.3,FastLED@3.4.0
           arduino-board-fqbn: ${{ matrix.arduino-boards-fqbn }}
+          sketch-names: ESP32-WiFi-Hash-Monster.ino
+          platform-url: https://raw.githubusercontent.com/espressif/arduino-esp32/gh-pages/package_esp32_dev_index.json
           #platform-default-url: ${{ env.PLATFORM_DEFAULT_URL }}
-          platform-url: ${{ matrix.platform-url }}
-          required-libraries: ${{ matrix.required-libraries }}
-          sketch-names: ${{ matrix.sketch-names }}
+          #platform-url: ${{ matrix.platform-url }}
+          #required-libraries: ${{ matrix.required-libraries }}
+          #sketch-names: ${{ matrix.sketch-names }}
           #sketches-exclude: ${{ matrix.sketches-exclude }}
-          build-properties: ${{ toJson(matrix.build-properties) }}
+          #build-properties: ${{ toJson(matrix.build-properties) }}
