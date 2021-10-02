@@ -17,10 +17,10 @@ jobs:
       matrix:
 
         arduino-boards-fqbn:
-          - esp32:esp32:m5stack-fire:FlashFreq=80
-          - esp32:esp32:m5stack-core-esp32:FlashFreq=80
-          - esp32:esp32:m5stack-core2:FlashFreq=80
-          - esp32:esp32:odroid_esp32:FlashFreq=80
+          - esp32:esp32:m5stack-fire
+          - esp32:esp32:m5stack-core-esp32
+          - esp32:esp32:m5stack-core2
+          - esp32:esp32:odroid_esp32
 
       fail-fast: false
 
