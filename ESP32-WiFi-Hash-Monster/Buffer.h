@@ -32,8 +32,7 @@ class Buffer {
     void addPacket(uint8_t* buf, uint32_t len);
     void save(fs::FS* fs);
     void forceSave(fs::FS* fs);
-
-
+    void pruneZeroFiles(fs::FS* fs);
 
   private:
     void write(int32_t n);

@@ -28,6 +28,35 @@ void Buffer::checkFS(fs::FS* fs) {
 }
 
 
+void Buffer::pruneZeroFiles(fs::FS* fs)
+{
+  fs::File root = fs->open( folderName );
+  if( ! root.isDirectory() ) {
+    log_e("'%s' is not a directory", folderName );
+    root.close();
+    return;
+  }
+  fs::File fileToCheck;
+  while( fileToCheck = root.openNextFile() ) {
+    if( fileToCheck.isDirectory() ) continue;
+    #if defined ESP_IDF_VERSION_MAJOR && ESP_IDF_VERSION_MAJOR >= 4
+      String path = fileToCheck.path();
+    #else
+      String path = fileToCheck.name();
+    #endif
+    size_t size = fileToCheck.size();
+    fileToCheck.close();
+    if( path.endsWith(".pcap") && size == 0 ) {
+      fs->remove( path.c_str() );
+      Serial.printf("Removed empty file: %s\n", path.c_str() );
+    } else {
+      log_d("Found existing pcap file: %s (%d bytes)", path.c_str(), size );
+    }
+  }
+  root.close();
+}
+
+
 bool Buffer::open(fs::FS* fs){
   int i=0;
   fileNameStr[0] = 0;
@@ -41,16 +70,7 @@ bool Buffer::open(fs::FS* fs){
     }
   } while(fs->exists( fileNameStr ));
 
-  Serial.printf( "Will create new file: %s\n", fileNameStr );
-
-  file = fs->open( fileNameStr, FILE_WRITE);
-  file.close();
-
-  if( !fs->exists( fileNameStr ) ) {
-    // SD Card full or not inserted
-    log_e("SD Card full or not inserted");
-    return false;
-  }
+  Serial.printf( "Current pcap file is: %s\n", fileNameStr );
 
   bufSizeA = 0;
   bufSizeB = 0;
