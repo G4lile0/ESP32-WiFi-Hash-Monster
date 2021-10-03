@@ -41,20 +41,42 @@
   #include <M5StackUpdater.h> // https://github.com/tobozo/M5Stack-SD-Updater/
 #endif
 
-#include "Free_Fonts.h"
-#include <SPI.h>
-#include "freertos/FreeRTOS.h"
-#include "esp_wifi.h"
-#include "esp_wifi_types.h"
-#include "esp_system.h"
-#include "esp_event.h"
-#include "esp_event_loop.h"
-#include "nvs_flash.h"
-#include <stdio.h>
-#include <string>
-#include <cstddef>
+#if defined ESP_IDF_VERSION_MAJOR && ESP_IDF_VERSION_MAJOR >= 4
+  // Use LWIP stack
+  #include "esp_wifi.h"
+#else
+  // Use legacy stack
+  #include <SPI.h>
+  #include "freertos/FreeRTOS.h"
+  #include "esp_wifi.h"
+  #include "esp_wifi_types.h"
+  #include "esp_system.h"
+  #include "esp_event.h"
+  #include "esp_event_loop.h"
+  #include "nvs_flash.h"
+  #include <stdio.h>
+  #include <string>
+  #include <cstddef>
+  esp_err_t event_handler(void* ctx,system_event_t* event){return ESP_OK;}
+#endif
 
 #include <Preferences.h>
+#include "Buffer.h"
+#include "Faces.h"
+#include "FS.h"
+#include "SD.h"
+
+#ifdef ARDUINO_M5STACK_FIRE
+  #pragma GCC diagnostic push
+  #pragma GCC diagnostic ignored "-Wcpp"
+  #include <FastLED.h>
+  #pragma diagnostic pop
+  #define M5STACK_FIRE_NEO_NUM_LEDS 10
+  #define M5STACK_FIRE_NEO_DATA_PIN 15
+  // Define the array of leds
+  CRGB leds[M5STACK_FIRE_NEO_NUM_LEDS];
+#endif
+
 #define MAX_CH 13     // 1-14ch(1-11 US,1-13 EU and 1-14 Japan)
 #define AUTO_CHANNEL_INTERVAL 15000 // how often to switch channels automatically, in milliseconds
 #define USE_SD_BY_DEFAULT true
@@ -70,20 +92,7 @@
   #define RUNNING_CORE 1
 #endif
 
-#include "Buffer.h"
-#include "Faces.h"
-#include "FS.h"
-#include "SD.h"
 
-#ifdef ARDUINO_M5STACK_FIRE
-  #include <FastLED.h>
-  #define M5STACK_FIRE_NEO_NUM_LEDS 10
-  #define M5STACK_FIRE_NEO_DATA_PIN 15
-  // Define the array of leds
-  CRGB leds[M5STACK_FIRE_NEO_NUM_LEDS];
-#endif
-
-esp_err_t event_handler(void* ctx,system_event_t* event){return ESP_OK;}
 /* ===== run-time variables ===== */
 Buffer sdBuffer;
 Preferences preferences;
@@ -260,14 +269,23 @@ void setupWiFiPromisc()
 {
   Serial.println("NVS Flash init");
   nvs_flash_init();
-  Serial.println("TCP adapter init");
-  tcpip_adapter_init();
-
+  #if defined ESP_IDF_VERSION_MAJOR && ESP_IDF_VERSION_MAJOR >= 4
+    // esp-idf 4.4 uses LWIP
+    Serial.println("LWIP init");
+    esp_netif_init();
+  #else
+    Serial.println("TCP adapter init");
+    tcpip_adapter_init();
+  #endif
   //  wificfg.wifi_task_core_id = 0;
-
   wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
-  Serial.println("[1] Attaching NULL event handler");
-  ESP_ERROR_CHECK(esp_event_loop_init(event_handler, NULL));
+  #if defined ESP_IDF_VERSION_MAJOR && ESP_IDF_VERSION_MAJOR >= 4
+    // esp_event_loop_init is deprecated in esp-idf 4.4
+    Serial.println("[1] Skipping event loop init");
+  #else
+    Serial.println("[1] Attaching NULL event handler");
+    ESP_ERROR_CHECK(esp_event_loop_init(event_handler, NULL));
+  #endif
   Serial.println("[2] Initing WiFi with config defaults");
   ESP_ERROR_CHECK(esp_wifi_init(&cfg));
   //ESP_ERROR_CHECK(esp_wifi_set_country(WIFI_COUNTRY_EU));
@@ -303,12 +321,6 @@ void setup()
   #endif
   M5.begin(); // this will fire Serial.begin()
 
-
-  #ifdef ARDUINO_M5STACK_Core2
-    // specific M5Core2 tweaks go here
-    // setSystemTimeFromRtc();
-  #endif
-
   #ifdef USE_M5STACK_UPDATER
     // New SD Updater support, requires the latest version of https://github.com/tobozo/M5Stack-SD-Updater/
     #if defined M5_SD_UPDATER_VERSION_INT
@@ -333,8 +345,9 @@ void setup()
     if( lastcheck + 60000 < millis() ) {
       //Serial.println( GOTOSLEEP_MESSAGE );
       #ifdef ARDUINO_M5STACK_Core2
+        M5.sd_end();
         M5.Axp.SetLcdVoltage(2500);
-        M5.Axp.DeepSleep();
+        M5.Axp.PowerOff();
       #elif defined(ARDUINO_M5STACK_FIRE) || defined(ARDUINO_M5Stack_Core_ESP32)
         M5.setWakeupButton( BUTTON_B_PIN );
         M5.powerOFF();
@@ -435,7 +448,7 @@ static void initSpritesTask( void* param )
   if(!units1.createSprite( units1Width, units1Height ) ) {
     log_e("Can't create units1 sprite");
   }
-  units1.setFont(FM9);
+  units1.setFont(&fonts::FreeMono9pt7b);
   units1.setTextColor( TFT_WHITE, TFT_BLACK );
   units1.setBitmapColor( TFT_WHITE, TFT_BLACK);  // Pkts Scale
   units1.setTextDatum(MR_DATUM);
@@ -448,11 +461,7 @@ static void initSpritesTask( void* param )
     log_e("Can't create face sprite");
   }
   face1.fillSprite(TFT_BLACK); // Note: Sprite is filled with black when created
-  #ifdef _CHIMERA_CORE_
-    face1.setSwapBytes(true);
-  #else
-    face1.setSwapBytes(false);
-  #endif
+  face1.setSwapBytes(true); // apply endianness since images are stored in 16bits words
   UIReady = true;
   log_w("Leaving initSprites task !");
   vTaskDelete(NULL);
@@ -477,12 +486,11 @@ static void bootAnimationTask( void* param )
   tft.setTextColor(TFT_WHITE, TFT_BLACK);
   tft.setTextSize(0);
 
-  tft.setFont(FM12);
-  //tft.setTextSize( 0.75 );
-  tft.drawString( "Purple Hash Monster", 4, 24);
-  tft.drawString( "by @g4lile0", 24, 44);
-  tft.drawString( "90% PacketMonitor32", 4, 74);
-  tft.drawString( "by @Spacehuhn", 24, 94);
+  tft.setFont(&fonts::FreeMono12pt7b);
+  tft.drawString( "Purple Hash Monster", 6, 24);
+  tft.drawString( "by @g4lile0", 26, 44);
+  tft.drawString( "90% PacketMonitor32", 6, 74);
+  tft.drawString( "by @Spacehuhn", 26, 94);
   tft.setSwapBytes(true);
 
   ypos = voffset - ( abs( cos(vcursor) )*vamplitude );
@@ -504,14 +512,9 @@ static void bootAnimationTask( void* param )
 
   tft.fillRect( 0, 0, 320, 120, TFT_BLACK );
 
-  tft.drawString( "Setting up WiFi...", 6, 44);
-
-  setupWiFiPromisc();
-
   tft.drawString( "Checking SD...", 6, 74);
 
-  //sdBuffer = Buffer();
-  if( !sdBuffer.init() ) {
+  if( !sdBuffer.init() ) { // allocate buffer memory
     // TODO: print error on display
     Serial.println("Error, not enough memory for buffer");
     while(1) vTaskDelay(1);
@@ -519,6 +522,8 @@ static void bootAnimationTask( void* param )
 
   if ( setupSD() ) {
     sdBuffer.checkFS(&SD);
+    sdBuffer.pruneZeroFiles(&SD); // SD cleanup: remove zero-length pcap files from previous scans
+
     if( sdBuffer.open(&SD) ) {
       Serial.println("SD CHECK OPEN");
     } else {
@@ -530,15 +535,14 @@ static void bootAnimationTask( void* param )
     Serial.println("SD Setup failed");
   }
 
+  tft.drawString( "Setting up WiFi...", 6, 44);
+
+  setupWiFiPromisc();
 
   WelComeTaskReady = true;
   log_d("Leaving welcome task !");
   vTaskDelete( NULL );
 }
-
-
-
-
 
 
 
@@ -568,11 +572,9 @@ void setChannel(int newChannel)
     preferences.putUInt("channel", ch);
     preferences.end();
   }
-  //esp_wifi_set_promiscuous(false);
   esp_wifi_set_promiscuous(true);
   esp_wifi_set_channel(ch, WIFI_SECOND_CHAN_NONE);
   esp_wifi_set_promiscuous_rx_cb(&wifi_promiscuous);
-  //  esp_wifi_set_promiscuous(true);
 }
 
 
@@ -699,13 +701,6 @@ char * wifi_sniffer_packet_type2str(wifi_promiscuous_pkt_type_t type)
   }
 }
 
-/*
-// deprecated, see ether_ntoa()
-static void getMAC(char *addr, uint8_t* data, uint16_t offset) {
-  sprintf(addr, "%02x:%02x:%02x:%02x:%02x:%02x", data[offset+0], data[offset+1], data[offset+2], data[offset+3], data[offset+4], data[offset+5]);
-}
-*/
-
 
 static void setLastSSID(uint16_t start, uint16_t size, uint8_t* data)
 {
@@ -716,8 +711,6 @@ static void setLastSSID(uint16_t start, uint16_t size, uint8_t* data)
     u++;
   }
   last_ssid[u]=0;
-  //Serial.print("SSID Char:");
-  //Serial.println(last_ssid);
 }
 
 
@@ -896,9 +889,11 @@ void wifi_promiscuous(void* buf, wifi_promiscuous_pkt_type_t type)
   //  Serial.print(" SSID: ");
   //  setLastSSID(26, SSID_length, pkt->payload);
 }
-// ===== functions ===================================================
 
 
+
+
+// ===== UI functions ===================================================
 
 
 void drawHeaderVal( TFT_eSprite *sprite, int32_t posx, int32_t posy, String title, String value )
@@ -910,7 +905,6 @@ void drawHeaderVal( TFT_eSprite *sprite, int32_t posx, int32_t posy, String titl
   header.setTextColor( TFT_BLACK, TFT_BLUE ); // restore
   header.drawString(value, posx+rectW, posy);
 }
-
 
 
 void draw()
@@ -1103,12 +1097,11 @@ void draw_RSSI()
   units2.drawString( " " + String(formatUnit(ssid_eapol_count)), units2Width-1, 50 );
 
   units2.pushSprite( units2PosX, units2PosY );
-
-
 }
 
 
-// ====== functions ===================================================
+
+// ====== Core task ===================================================
 void coreTask( void * p )
 {
   while( !UIReady ) vTaskDelay(1); // wait for sprites to init
@@ -1122,17 +1115,15 @@ void coreTask( void * p )
   tft.clear();
   // draw icons
   tft.fillRect( 0, footerPosY, 32, 40, TFT_BLUE );
-  tft.drawPng( rssi_16x16_png, rssi_16x16_png_len,   2, footerPosY+2 );
-  tft.drawPng( eapol_16x16_png, eapol_16x16_png_len, 2, footerPosY+20 );
+  tft.pushImage( 2, footerPosY+2,  16, 16, (uint16_t*)rssi_16x16_rgb565,  TFT_BLACK );
+  tft.pushImage( 2, footerPosY+20, 16, 16, (uint16_t*)eapol_16x16_rgb565, TFT_BLACK );
 
   lastButtonTime = millis();
   M5.update();
 
-
   while (true) {
     bool needDraw = false;
     currentTime = millis();
-    /* bit of spaghetti code, have to clean this up later :D_ */
 
     if (autoChMode==1) {
       if ( currentTime - lastAutoSwitchChTime > AUTO_CHANNEL_INTERVAL ) {
@@ -1237,8 +1228,6 @@ void coreTask( void * p )
       setChannel(ch);
     }
   }
-  //draw_RSSI();
-  //tft.pushImage(200, 200, 64, 64, happy_64);
   vTaskDelete(NULL);
 }
 
@@ -1269,6 +1258,3 @@ void blinky( void * p )
   }
 }
 #endif
-
-
-// ===================================================================
