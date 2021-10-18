@@ -16,6 +16,8 @@ jobs:
 
     steps:
     - uses: actions/checkout@v2
+      with:
+        ref: ${{ github.event.pull_request.head.sha }}
     - name: Cache pip
       uses: actions/cache@v2
       with:
@@ -36,6 +38,6 @@ jobs:
         pip install --upgrade platformio
     - name: Run PlatformIO
       run: pio run -e m5stack-fire -e m5stack-core-esp32 -e m5stack-core2 -e odroid_esp32
-      
-          
-      
+
+
+
