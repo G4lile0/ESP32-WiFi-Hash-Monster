@@ -984,7 +984,13 @@ void draw()
       char timeStr[15] = {0};
       const char* timeTpl = " %02d : %02d : %02d";
       snprintf( timeStr, 14, timeTpl, ptm->tm_hour, ptm->tm_min, ptm->tm_sec );
-      graph1.drawString( timeStr, graph1Width, 0 );
+      // battery percentage
+      float batVoltage = M5.Axp.GetBatVoltage();
+      // battery voltage range = 4.2~3.2
+      float batPercentage = ( batVoltage < 3.2 ) ? 0 : ( batVoltage - 3.2 ) * 100;
+      char batteryStr[10];
+      snprintf( batteryStr, 10, "%3.2f%% ", batPercentage);
+      graph1.drawString(strcat(batteryStr,timeStr), graph1Width, 0 );
     }
   #endif
 
