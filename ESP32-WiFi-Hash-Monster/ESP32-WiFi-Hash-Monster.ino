@@ -503,7 +503,7 @@ static void bootAnimationTask( void* param )
     if(  (xdir == 1  && xpos+xdir >= tft.width()-64)
       || (xdir == -1 && xpos+xdir < 0 ) ) {
       xdir = -xdir;
-      imgId = random()%13;
+      imgId = random(0,13);
     }
     xpos += xdir*hstep;
     vcursor += vstep;
