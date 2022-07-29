@@ -503,7 +503,7 @@ static void bootAnimationTask( void* param )
     if(  (xdir == 1  && xpos+xdir >= tft.width()-64)
       || (xdir == -1 && xpos+xdir < 0 ) ) {
       xdir = -xdir;
-      imgId = random()%13;
+      imgId = random(0,13);
     }
     xpos += xdir*hstep;
     vcursor += vstep;
@@ -1045,6 +1045,13 @@ void draw_RSSI()
   footer.drawString(p, 2, 3);
   p = String(last_eapol_ssid[0]!='\0'? last_eapol_ssid : "[none]")+" "+(String)last_eapol_mac;
   footer.drawString(p, 2, 3+18);
+  #ifdef ARDUINO_M5Stack_Core_ESP32
+    M5.Power.begin();
+    // battery percentage
+    int batLevel = M5.Power.getBatteryLevel();
+    p = "Batt: " + (String)batLevel;
+    footer.drawString(p, 220, 3+18);
+  #endif
   footer.pushSprite( footerPosX, footerPosY );
 
   // Draw point in graph2 sprite at far right edge (this will scroll left later)
