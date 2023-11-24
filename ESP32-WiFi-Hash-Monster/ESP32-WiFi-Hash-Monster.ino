@@ -25,11 +25,12 @@
 //--------------------------------------------------------------------
 
 #include <ESP32-Chimera-Core.h>        // https://github.com/tobozo/ESP32-Chimera-Core/
+
 #define tft M5.Lcd
-#if !defined USE_M5STACK_UPDATER
+/* #if !defined USE_M5STACK_UPDATER
   // comment this out to disable SD-Updater
   #define USE_M5STACK_UPDATER
-#endif
+#endif */
 
 #ifdef USE_M5STACK_UPDATER
   #ifdef ARDUINO_M5STACK_Core2
@@ -471,7 +472,7 @@ static void initSpritesTask( void* param )
 
 static void bootAnimationTask( void* param )
 {
-  int waitmillis = 2000; // max animation duration
+  int waitmillis = 1000; // max animation duration
   float xpos = 200;      // initial monster x position
   float ypos = 158;      // initial monster y position
   float xdir = 1;        // bounce horizontal direction
@@ -1045,13 +1046,15 @@ void draw_RSSI()
   footer.drawString(p, 2, 3);
   p = String(last_eapol_ssid[0]!='\0'? last_eapol_ssid : "[none]")+" "+(String)last_eapol_mac;
   footer.drawString(p, 2, 3+18);
-  #ifdef ARDUINO_M5Stack_Core_ESP32
-    M5.Power.begin();
+ 
+  #ifdef ARDUINO_M5STACK_Core2 //ARDUINO_M5Stack_Core_ESP32
     // battery percentage
-    int batLevel = M5.Power.getBatteryLevel();
+    float batLevel =   M5.Axp.GetBatVoltage(); //M5.Power.getBatteryLevel();
     p = "Batt: " + (String)batLevel;
-    footer.drawString(p, 220, 3+18);
+    //Serial.printf("Battery Level - %.1f\n", batLevel);
+    footer.drawString(p, 220, 3+18);  
   #endif
+  
   footer.pushSprite( footerPosX, footerPosY );
 
   // Draw point in graph2 sprite at far right edge (this will scroll left later)
@@ -1106,7 +1109,28 @@ void draw_RSSI()
   units2.pushSprite( units2PosX, units2PosY );
 }
 
+#if defined( ARDUINO_M5STACK_Core2 ) // M5Core2 starts APX after display is on
+  Button* _btns[3] = { &M5.BtnA, &M5.BtnB, &M5.BtnC };
+  int _btns_state[3] = {0, 0, 0 };
+#endif
 
+void setButtons( uint8_t btnEnabled ) {
+  for( uint8_t i=0; i<3; i++ ) {
+    if( i == btnEnabled && _btns_state[i] == 0) {
+      Serial.printf("Button %d pressed\n", btnEnabled);
+      _btns_state[i] = 1;
+      _btns[i]->setState( 1 );
+    }
+  }
+}
+
+void clearButtons() {
+  for ( uint8_t i=0; i<3; i++) {
+    _btns_state[i] = 0;
+    _btns[i]->setState( 0 );
+    //Serial.print("No Touch Detected.\n");
+  }
+}
 
 // ====== Core task ===================================================
 void coreTask( void * p )
@@ -1131,6 +1155,32 @@ void coreTask( void * p )
   while (true) {
     bool needDraw = false;
     currentTime = millis();
+    
+    TouchPoint_t tp = M5.Touch.getPressPoint();
+    //lgfx::touch_point_t tp = M5.M5Core2TouchButtonEmu->tp;
+    //Serial.printf("Press point: %d, %d\n", tp.x, tp.y);
+    int lcd_width = M5.Lcd.width(); //320
+    int lcd_height = M5.Lcd.height(); //240
+    //Serial.printf("Width/Height: %d, %d\n", lcd_width, lcd_height);
+    int button_zone_width = ((320+1)/3); // 1/3rd of the screen per button
+    int button_marginleft = 15; // dead space in pixels before and after each button to prevent overlap
+    int button_marginright = button_zone_width-button_marginleft;
+    int button_num = -1;
+
+    if (tp.x == -1 && tp.y == -1) {
+      clearButtons();
+    }
+
+    if (tp.y >= 250) {
+      int tpxmod = tp.x%button_zone_width;
+      if ( tpxmod > button_marginleft && tpxmod < button_marginright ) {
+        button_num = tp.x / button_zone_width;
+      }
+
+      setButtons( button_num );
+    }
+
+    //Serial.printf("A/B/C: %d, %d, %d\n", _btns[0]->read(),  _btns[1]->read(),  _btns[2]->read());
 
     if (autoChMode==1) {
       if ( currentTime - lastAutoSwitchChTime > AUTO_CHANNEL_INTERVAL ) {
