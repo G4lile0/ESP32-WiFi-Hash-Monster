@@ -25,11 +25,12 @@
 //--------------------------------------------------------------------
 
 #include <ESP32-Chimera-Core.h>        // https://github.com/tobozo/ESP32-Chimera-Core/
+
 #define tft M5.Lcd
-#if !defined USE_M5STACK_UPDATER
+/* #if !defined USE_M5STACK_UPDATER
   // comment this out to disable SD-Updater
   #define USE_M5STACK_UPDATER
-#endif
+#endif */
 
 #ifdef USE_M5STACK_UPDATER
   #ifdef ARDUINO_M5STACK_Core2
@@ -471,7 +472,7 @@ static void initSpritesTask( void* param )
 
 static void bootAnimationTask( void* param )
 {
-  int waitmillis = 2000; // max animation duration
+  int waitmillis = 1000; // max animation duration
   float xpos = 200;      // initial monster x position
   float ypos = 158;      // initial monster y position
   float xdir = 1;        // bounce horizontal direction
@@ -503,7 +504,7 @@ static void bootAnimationTask( void* param )
     if(  (xdir == 1  && xpos+xdir >= tft.width()-64)
       || (xdir == -1 && xpos+xdir < 0 ) ) {
       xdir = -xdir;
-      imgId = random()%13;
+      imgId = random(0,13);
     }
     xpos += xdir*hstep;
     vcursor += vstep;
@@ -1045,6 +1046,15 @@ void draw_RSSI()
   footer.drawString(p, 2, 3);
   p = String(last_eapol_ssid[0]!='\0'? last_eapol_ssid : "[none]")+" "+(String)last_eapol_mac;
   footer.drawString(p, 2, 3+18);
+ 
+  #ifdef ARDUINO_M5STACK_Core2 //ARDUINO_M5Stack_Core_ESP32
+    // battery percentage
+    float batLevel =   M5.Axp.GetBatVoltage(); //M5.Power.getBatteryLevel();
+    p = "Batt: " + (String)batLevel;
+    //Serial.printf("Battery Level - %.1f\n", batLevel);
+    footer.drawString(p, 220, 3+18);  
+  #endif
+  
   footer.pushSprite( footerPosX, footerPosY );
 
   // Draw point in graph2 sprite at far right edge (this will scroll left later)
@@ -1099,7 +1109,112 @@ void draw_RSSI()
   units2.pushSprite( units2PosX, units2PosY );
 }
 
+#if defined( ARDUINO_M5STACK_Core2 ) // M5Core2 starts APX after display is on
+  Button* _btns[3] = { &M5.BtnA, &M5.BtnB, &M5.BtnC };
+  int _btns_state[3] = {0, 0, 0 };
+  int _btns_time[3] = {0, 0, 0};
+#endif
 
+bool setButtons( uint8_t btnEnabled ) {
+  for( uint8_t i=0; i<3; i++ ) {
+    if( i == btnEnabled && _btns_state[i] == 0) {
+      Serial.printf("Button %d pressed\n", btnEnabled);
+      _btns_state[i] = 1;
+      //_btns[i]->setState( 1 );
+      _btns_time[i] = millis();
+      
+      switch (i)
+        {
+        case 0:
+          if (bright>1) {
+            Serial.println("Incognito Mode");
+            bright=0;
+            bright_leds=0;
+            tft.setBrightness(bright);
+          } else {
+            bright=100;
+            bright_leds=100;
+            tft.setBrightness(bright);
+          }
+          return false;
+          break;
+        case 1:
+          bright+=50;
+          if (bright>251) bright=0;
+          tft.setBrightness(bright);
+          return false;
+          break;
+        case 2:
+          setChannel(ch + 1);
+          return true;
+        break;
+        
+        default:
+          return false;
+          break;
+        }
+    }
+  }
+  return false;
+}
+
+bool clearButtons() {
+  for ( uint8_t i=0; i<3; i++) {
+    if ( _btns_state[i] == 1 ) {
+      _btns_state[i] = 0;
+      //_btns[i]->setState( 0 );
+      Serial.printf("Button %d released.\n", i);
+
+      if ( millis() - _btns_time[i] > 700) {
+        Serial.printf("Button %d long press.\n", i);
+        switch (i)
+        {
+        case 0:
+          // toggle SD use
+          if ( useSD ) { // in use, disable
+            sdBuffer.close(&SD); // flush current buffer
+            useSD = false;
+            SDSetupDone = false;
+            M5.sd_end();
+          } else { // not in use, try to enable
+            if ( setupSD() ) {
+              if( !sdBuffer.open(&SD) ) {
+                Serial.println(" SD ERROR, Can't create file, disabling SD");
+                useSD = false;
+                SDSetupDone = false;
+                M5.sd_end();
+              }
+            }
+          }
+          return true;
+          
+          break;
+        case 1:
+          bright_leds+=100;
+          if (bright_leds>251) bright_leds=0;
+          Serial.printf("LED Brigthness: %d", bright_leds);
+          return false;
+          break;
+        case 2:
+          autoChMode++;
+          if (autoChMode>2) autoChMode=0;
+          Serial.printf("Channel hop mode is now set to: %s\n", authChmodeStr[autoChMode] );
+          preferences.begin("packetmonitor32", false);
+          preferences.putUInt("autoChMode", autoChMode);
+          preferences.end();
+          return false;
+          break;
+        
+        default:
+          return false;
+          break;
+        }
+        
+      }
+    }  
+  }
+  return false;
+}
 
 // ====== Core task ===================================================
 void coreTask( void * p )
@@ -1124,6 +1239,30 @@ void coreTask( void * p )
   while (true) {
     bool needDraw = false;
     currentTime = millis();
+    
+    TouchPoint_t tp = M5.Touch.getPressPoint();
+    //lgfx::touch_point_t tp = M5.M5Core2TouchButtonEmu->tp;
+    //Serial.printf("Press point: %d, %d\n", tp.x, tp.y);
+    int lcd_width = M5.Lcd.width(); //320
+    int lcd_height = M5.Lcd.height(); //240
+    //Serial.printf("Width/Height: %d, %d\n", lcd_width, lcd_height);
+    int button_zone_width = ((320+1)/3); // 1/3rd of the screen per button
+    int button_marginleft = 15; // dead space in pixels before and after each button to prevent overlap
+    int button_marginright = button_zone_width-button_marginleft;
+    int button_num = -1;
+
+    if (tp.x == -1 && tp.y == -1) {
+      needDraw = clearButtons();
+    }
+
+    if (tp.y >= 250) {
+      int tpxmod = tp.x%button_zone_width;
+      if ( tpxmod > button_marginleft && tpxmod < button_marginright ) {
+        button_num = tp.x / button_zone_width;
+      }
+
+      needDraw = setButtons( button_num );
+    }
 
     if (autoChMode==1) {
       if ( currentTime - lastAutoSwitchChTime > AUTO_CHANNEL_INTERVAL ) {
@@ -1138,71 +1277,9 @@ void coreTask( void * p )
         needDraw = true;
       }
     }
-
-    if ( currentTime - lastButtonTime > BUTTON_DEBOUNCE ) {
-      M5.update();
-      // buttons assignment :
-      //  - Incognito mode => BtnA short press (toggles display)
-      //  - SD Activation  => BtnA long press (enable/disable SD)
-      //  - Brightness     => BtnB short press (cycle through values)
-      //  - Channel hop    => BtnC long press for mode change, short press for manual change
-      if( M5.BtnA.wasReleased() ) {
-        if (bright>1) {
-          Serial.println("Incognito Mode");
-          bright=0;
-          bright_leds=0;
-          tft.setBrightness(bright);
-        } else {
-          bright=100;
-          bright_leds=100;
-          tft.setBrightness(bright);
-        }
-      } else if (M5.BtnA.wasReleasefor(700)) {
-        // toggle SD use
-        if ( useSD ) { // in use, disable
-          sdBuffer.close(&SD); // flush current buffer
-          useSD = false;
-          SDSetupDone = false;
-          M5.sd_end();
-        } else { // not in use, try to enable
-          if ( setupSD() ) {
-            if( !sdBuffer.open(&SD) ) {
-              Serial.println(" SD ERROR, Can't create file, disabling SD");
-              useSD = false;
-              SDSetupDone = false;
-              M5.sd_end();
-            }
-          }
-        }
-        needDraw = true;
-      }
-
-      if( M5.BtnB.wasReleased() ) {
-        bright+=50;
-        if (bright>251) bright=0;
-        tft.setBrightness(bright);
-      } else if (M5.BtnB.wasReleasefor(700)) {
-        bright_leds+=100;
-        if (bright_leds>251) bright_leds=0;
-        Serial.println(bright_leds);
-      }
-
-      if( M5.BtnC.wasReleased() ) {
-        setChannel(ch + 1);
-        needDraw = true;
-      } else if (M5.BtnC.wasReleasefor(700)) {
-        autoChMode++;
-        if (autoChMode>2) autoChMode=0;
-        Serial.printf("Channel hop mode is now set to: %s\n", authChmodeStr[autoChMode] );
-        preferences.begin("packetmonitor32", false);
-        preferences.putUInt("autoChMode", autoChMode);
-        preferences.end();
-      }
-
-      lastButtonTime = currentTime;
-      if (needDraw) draw();
-    }
-
+  
+    if (needDraw) draw();
+   
     // maintain buffer and save to SD if necessary
     if (useSD) sdBuffer.save(&SD);
     // draw Display
