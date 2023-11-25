@@ -1112,24 +1112,108 @@ void draw_RSSI()
 #if defined( ARDUINO_M5STACK_Core2 ) // M5Core2 starts APX after display is on
   Button* _btns[3] = { &M5.BtnA, &M5.BtnB, &M5.BtnC };
   int _btns_state[3] = {0, 0, 0 };
+  int _btns_time[3] = {0, 0, 0};
 #endif
 
-void setButtons( uint8_t btnEnabled ) {
+bool setButtons( uint8_t btnEnabled ) {
   for( uint8_t i=0; i<3; i++ ) {
     if( i == btnEnabled && _btns_state[i] == 0) {
       Serial.printf("Button %d pressed\n", btnEnabled);
       _btns_state[i] = 1;
-      _btns[i]->setState( 1 );
+      //_btns[i]->setState( 1 );
+      _btns_time[i] = millis();
+      
+      switch (i)
+        {
+        case 0:
+          if (bright>1) {
+            Serial.println("Incognito Mode");
+            bright=0;
+            bright_leds=0;
+            tft.setBrightness(bright);
+          } else {
+            bright=100;
+            bright_leds=100;
+            tft.setBrightness(bright);
+          }
+          return false;
+          break;
+        case 1:
+          bright+=50;
+          if (bright>251) bright=0;
+          tft.setBrightness(bright);
+          return false;
+          break;
+        case 2:
+          setChannel(ch + 1);
+          return true;
+        break;
+        
+        default:
+          return false;
+          break;
+        }
     }
   }
+  return false;
 }
 
-void clearButtons() {
+bool clearButtons() {
   for ( uint8_t i=0; i<3; i++) {
-    _btns_state[i] = 0;
-    _btns[i]->setState( 0 );
-    //Serial.print("No Touch Detected.\n");
+    if ( _btns_state[i] == 1 ) {
+      _btns_state[i] = 0;
+      //_btns[i]->setState( 0 );
+      Serial.printf("Button %d released.\n", i);
+
+      if ( millis() - _btns_time[i] > 700) {
+        Serial.printf("Button %d long press.\n", i);
+        switch (i)
+        {
+        case 0:
+          // toggle SD use
+          if ( useSD ) { // in use, disable
+            sdBuffer.close(&SD); // flush current buffer
+            useSD = false;
+            SDSetupDone = false;
+            M5.sd_end();
+          } else { // not in use, try to enable
+            if ( setupSD() ) {
+              if( !sdBuffer.open(&SD) ) {
+                Serial.println(" SD ERROR, Can't create file, disabling SD");
+                useSD = false;
+                SDSetupDone = false;
+                M5.sd_end();
+              }
+            }
+          }
+          return true;
+          
+          break;
+        case 1:
+          bright_leds+=100;
+          if (bright_leds>251) bright_leds=0;
+          Serial.printf("LED Brigthness: %d", bright_leds);
+          return false;
+          break;
+        case 2:
+          autoChMode++;
+          if (autoChMode>2) autoChMode=0;
+          Serial.printf("Channel hop mode is now set to: %s\n", authChmodeStr[autoChMode] );
+          preferences.begin("packetmonitor32", false);
+          preferences.putUInt("autoChMode", autoChMode);
+          preferences.end();
+          return false;
+          break;
+        
+        default:
+          return false;
+          break;
+        }
+        
+      }
+    }  
   }
+  return false;
 }
 
 // ====== Core task ===================================================
@@ -1168,7 +1252,7 @@ void coreTask( void * p )
     int button_num = -1;
 
     if (tp.x == -1 && tp.y == -1) {
-      clearButtons();
+      needDraw = clearButtons();
     }
 
     if (tp.y >= 250) {
@@ -1177,10 +1261,8 @@ void coreTask( void * p )
         button_num = tp.x / button_zone_width;
       }
 
-      setButtons( button_num );
+      needDraw = setButtons( button_num );
     }
-
-    //Serial.printf("A/B/C: %d, %d, %d\n", _btns[0]->read(),  _btns[1]->read(),  _btns[2]->read());
 
     if (autoChMode==1) {
       if ( currentTime - lastAutoSwitchChTime > AUTO_CHANNEL_INTERVAL ) {
@@ -1195,71 +1277,9 @@ void coreTask( void * p )
         needDraw = true;
       }
     }
-
-    if ( currentTime - lastButtonTime > BUTTON_DEBOUNCE ) {
-      M5.update();
-      // buttons assignment :
-      //  - Incognito mode => BtnA short press (toggles display)
-      //  - SD Activation  => BtnA long press (enable/disable SD)
-      //  - Brightness     => BtnB short press (cycle through values)
-      //  - Channel hop    => BtnC long press for mode change, short press for manual change
-      if( M5.BtnA.wasReleased() ) {
-        if (bright>1) {
-          Serial.println("Incognito Mode");
-          bright=0;
-          bright_leds=0;
-          tft.setBrightness(bright);
-        } else {
-          bright=100;
-          bright_leds=100;
-          tft.setBrightness(bright);
-        }
-      } else if (M5.BtnA.wasReleasefor(700)) {
-        // toggle SD use
-        if ( useSD ) { // in use, disable
-          sdBuffer.close(&SD); // flush current buffer
-          useSD = false;
-          SDSetupDone = false;
-          M5.sd_end();
-        } else { // not in use, try to enable
-          if ( setupSD() ) {
-            if( !sdBuffer.open(&SD) ) {
-              Serial.println(" SD ERROR, Can't create file, disabling SD");
-              useSD = false;
-              SDSetupDone = false;
-              M5.sd_end();
-            }
-          }
-        }
-        needDraw = true;
-      }
-
-      if( M5.BtnB.wasReleased() ) {
-        bright+=50;
-        if (bright>251) bright=0;
-        tft.setBrightness(bright);
-      } else if (M5.BtnB.wasReleasefor(700)) {
-        bright_leds+=100;
-        if (bright_leds>251) bright_leds=0;
-        Serial.println(bright_leds);
-      }
-
-      if( M5.BtnC.wasReleased() ) {
-        setChannel(ch + 1);
-        needDraw = true;
-      } else if (M5.BtnC.wasReleasefor(700)) {
-        autoChMode++;
-        if (autoChMode>2) autoChMode=0;
-        Serial.printf("Channel hop mode is now set to: %s\n", authChmodeStr[autoChMode] );
-        preferences.begin("packetmonitor32", false);
-        preferences.putUInt("autoChMode", autoChMode);
-        preferences.end();
-      }
-
-      lastButtonTime = currentTime;
-      if (needDraw) draw();
-    }
-
+  
+    if (needDraw) draw();
+   
     // maintain buffer and save to SD if necessary
     if (useSD) sdBuffer.save(&SD);
     // draw Display
